@@ -1,11 +1,28 @@
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import { AppShell } from '@/components/layout/AppShell'
+import { OverviewPage } from '@/features/dashboard/pages/OverviewPage'
+import { AccountsPage } from '@/features/accounts/pages/AccountsPage'
+import { InvestmentsPage } from '@/features/investments/pages/InvestmentsPage'
+import { ExpensesPage } from '@/features/expenses/pages/ExpensesPage'
+import { SettingsPage } from '@/features/settings/pages/SettingsPage'
+import { LoginPage } from '@/features/auth/pages/LoginPage'
+
 function App() {
   return (
-    <main className="min-h-screen bg-slate-950 text-gray-100 flex flex-col items-center justify-center gap-4">
-      <p className="text-xs uppercase tracking-[0.4em] text-emerald-400">
-        Financial Analytics Dashboard
-      </p>
-      <h1 className="text-3xl font-semibold">Setup complete</h1>
-    </main>
+    <BrowserRouter>
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route element={<AppShell />}>
+          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/dashboard" element={<OverviewPage />} />
+          <Route path="/accounts" element={<AccountsPage />} />
+          <Route path="/investments" element={<InvestmentsPage />} />
+          <Route path="/expenses" element={<ExpensesPage />} />
+          <Route path="/settings" element={<SettingsPage />} />
+        </Route>
+        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+      </Routes>
+    </BrowserRouter>
   )
 }
 
