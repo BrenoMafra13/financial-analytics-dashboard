@@ -10,12 +10,17 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
+import { login } from '@/services'
+import { useUserStore } from '@/store/user'
 
 export function LoginPage() {
   const navigate = useNavigate()
+  const setUser = useUserStore((state) => state.setUser)
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    const user = await login()
+    setUser(user)
     navigate('/dashboard')
   }
 

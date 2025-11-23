@@ -6,13 +6,25 @@ import { InvestmentsPage } from '@/features/investments/pages/InvestmentsPage'
 import { ExpensesPage } from '@/features/expenses/pages/ExpensesPage'
 import { SettingsPage } from '@/features/settings/pages/SettingsPage'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
+import { useUserStore } from '@/store/user'
+
+function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const isAuthenticated = useUserStore((state) => state.isAuthenticated)
+  return isAuthenticated ? children : <Navigate to="/login" replace />
+}
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route element={<AppShell />}>
+        <Route
+          element={
+            <ProtectedRoute>
+              <AppShell />
+            </ProtectedRoute>
+          }
+        >
           <Route path="/" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<OverviewPage />} />
           <Route path="/accounts" element={<AccountsPage />} />

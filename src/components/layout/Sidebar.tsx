@@ -1,8 +1,9 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import { CreditCard, LayoutDashboard, LineChart, LogOut, Settings, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/utils/cn'
+import { useUserStore } from '@/store/user'
 
 const navigation = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
@@ -13,6 +14,14 @@ const navigation = [
 ]
 
 export function Sidebar() {
+  const navigate = useNavigate()
+  const setUser = useUserStore((state) => state.setUser)
+
+  const handleLogout = () => {
+    setUser(null)
+    navigate('/login')
+  }
+
   return (
     <aside className="hidden w-72 flex-col border-r border-surface-100 bg-white/80 px-5 py-8 text-surface-700 shadow-card backdrop-blur-xl dark:border-white/5 dark:bg-surface-950/90 dark:text-white lg:flex">
       <div className="px-1">
@@ -57,6 +66,7 @@ export function Sidebar() {
         <Button
           variant="ghost"
           className="w-full gap-2 border border-surface-100 bg-white/70 text-surface-700 hover:text-danger dark:border-white/10 dark:bg-white/5 dark:text-white"
+          onClick={handleLogout}
         >
           <LogOut className="h-4 w-4" />
           Logout
