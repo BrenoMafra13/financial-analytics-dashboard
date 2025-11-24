@@ -15,10 +15,10 @@ const navigation = [
 
 export function Sidebar() {
   const navigate = useNavigate()
-  const setUser = useUserStore((state) => state.setUser)
+  const logout = useUserStore((state) => state.logout)
 
   const handleLogout = () => {
-    setUser(null)
+    logout()
     navigate('/login')
   }
 

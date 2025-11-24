@@ -5,9 +5,12 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Select } from '@/components/ui/select'
-import { categories } from '@/services/categories'
+import { useQuery } from '@tanstack/react-query'
+import { fetchCategories } from '@/services/categories'
 import { useExpenseBreakdown } from '@/features/dashboard/hooks/useExpenseBreakdown'
 import { useExpenseTransactions } from '../hooks/useExpenseTransactions'
+import { TransactionFiltersBar } from '@/components/filters/TransactionFiltersBar'
+import { NewTransactionForm } from '@/features/transactions/components/NewTransactionForm'
 
 const budgetAmount = 2000
 const budgetCurrency = 'USD'
@@ -20,15 +23,12 @@ function formatDate(date: string) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(date))
 }
 
-function categoryLabel(categoryId: string) {
-  return categories.find((c) => c.id === categoryId)?.name ?? 'Other'
-}
-
 export function ExpensesPage() {
   const [page, setPage] = useState(1)
   const pageSize = 6
   const { data: breakdown, isLoading: loadingBreakdown, isError: errorBreakdown } = useExpenseBreakdown()
   const { data: expenses, isLoading, isError } = useExpenseTransactions(page, pageSize)
+  const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: fetchCategories })
 
   const spent = useMemo(() => {
     const items = expenses?.items ?? []
@@ -51,6 +51,9 @@ export function ExpensesPage() {
           {formatCurrency(spent.sum ?? 0, spent.currency ?? budgetCurrency)}
         </Badge>
       </div>
+
+      <TransactionFiltersBar />
+      <NewTransactionForm />
 
       <div className="grid gap-4 lg:grid-cols-3">
         <Card className="lg:col-span-2 p-0">
@@ -152,7 +155,9 @@ export function ExpensesPage() {
                       >
                         <td className="px-6 py-3 text-surface-500 dark:text-slate-300">{formatDate(tx.date)}</td>
                         <td className="px-6 py-3 text-surface-900 dark:text-white">{tx.description}</td>
-                        <td className="px-6 py-3 text-surface-500 dark:text-slate-300">{categoryLabel(tx.categoryId)}</td>
+                        <td className="px-6 py-3 text-surface-500 dark:text-slate-300">
+                          {categoriesQuery.data?.find((c) => c.id === tx.categoryId)?.name ?? 'Other'}
+                        </td>
                         <td className="px-6 py-3 text-right font-semibold text-danger">
                           {formatCurrency(tx.amount, tx.currency)}
                         </td>

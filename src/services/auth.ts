@@ -1,20 +1,28 @@
-import { simulateRequest } from './client'
+import { api } from './http'
 import type { User } from '@/types'
 
-const mockUser: User = {
-  id: 'user-1',
-  name: 'Breno Mafra',
-  email: 'breno@finance.com',
-  locale: 'en-US',
-  currency: 'USD',
-  tier: 'premium',
-  avatarUrl: '',
+export async function login(payload: { email: string; password: string }) {
+  const { data } = await api.post<{ token: string; user: User }>('/auth/login', payload)
+  return data
 }
 
-export async function login() {
-  return simulateRequest({ data: mockUser })
+export async function guestLogin() {
+  const { data } = await api.post<{ token: string; user: User }>('/auth/guest')
+  return data
+}
+
+export async function register(payload: {
+  name: string
+  email: string
+  password: string
+  currency: string
+  locale: string
+}) {
+  const { data } = await api.post<{ token: string; user: User }>('/auth/register', payload)
+  return data
 }
 
 export async function fetchCurrentUser() {
-  return simulateRequest({ data: mockUser })
+  const { data } = await api.get<User>('/me')
+  return data
 }

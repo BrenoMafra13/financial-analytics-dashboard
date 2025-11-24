@@ -6,6 +6,8 @@ import { InvestmentsPage } from '@/features/investments/pages/InvestmentsPage'
 import { ExpensesPage } from '@/features/expenses/pages/ExpensesPage'
 import { SettingsPage } from '@/features/settings/pages/SettingsPage'
 import { LoginPage } from '@/features/auth/pages/LoginPage'
+import { SignupPage } from '@/features/auth/pages/SignupPage'
+import { LandingPage } from '@/features/auth/pages/LandingPage'
 import { useUserStore } from '@/store/user'
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -17,7 +19,9 @@ function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route path="/" element={<LandingPage />} />
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/signup" element={<SignupPage />} />
         <Route
           element={
             <ProtectedRoute>
@@ -25,14 +29,14 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route path="/" element={<Navigate to="/dashboard" replace />} />
+          <Route path="/home" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<OverviewPage />} />
           <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/investments" element={<InvestmentsPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>
   )

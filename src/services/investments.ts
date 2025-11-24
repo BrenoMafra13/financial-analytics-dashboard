@@ -1,51 +1,34 @@
-import { simulateRequest } from './client'
+import { api } from './http'
 import type { Investment } from '@/types'
 
-const investments: Investment[] = [
-  {
-    id: 'inv-1',
-    symbol: 'AAPL',
-    name: 'Apple Inc',
-    type: 'STOCK',
-    quantity: 40,
-    currentPrice: 190,
-    currency: 'USD',
-    history: [
-      { date: '2024-11-01', value: 170 },
-      { date: '2024-12-01', value: 180 },
-      { date: '2025-01-01', value: 190 },
-    ],
-  },
-  {
-    id: 'inv-2',
-    symbol: 'VTI',
-    name: 'Vanguard Total Market',
-    type: 'ETF',
-    quantity: 25,
-    currentPrice: 245,
-    currency: 'USD',
-    history: [
-      { date: '2024-11-01', value: 230 },
-      { date: '2024-12-01', value: 238 },
-      { date: '2025-01-01', value: 245 },
-    ],
-  },
-  {
-    id: 'inv-3',
-    symbol: 'BTC',
-    name: 'Bitcoin',
-    type: 'CRYPTO',
-    quantity: 0.8,
-    currentPrice: 42000,
-    currency: 'USD',
-    history: [
-      { date: '2024-11-01', value: 36000 },
-      { date: '2024-12-01', value: 39000 },
-      { date: '2025-01-01', value: 42000 },
-    ],
-  },
-]
-
 export async function fetchInvestments() {
-  return simulateRequest({ data: investments })
+  const { data } = await api.get<Investment[]>('/investments')
+  return data.map((inv) => ({ ...inv, history: inv.history ?? buildHistory(inv) }))
+}
+
+export async function fetchMarketAssets() {
+  const { data } = await api.get<{ symbol: string; name: string; type: string; currentPrice: number; currency: string }[]>(
+    '/market/assets',
+  )
+  return data
+}
+
+export async function tradeInvestment(payload: {
+  symbol: string
+  name: string
+  type: Investment['type']
+  quantity: number
+  side: 'BUY' | 'SELL'
+  accountId: string
+  currency: 'USD' | 'CAD'
+}) {
+  await api.post('/investments/trade', payload)
+}
+
+function buildHistory(inv: Investment): Investment['history'] {
+  const months = ['2024-11-01', '2024-12-01', '2025-01-01']
+  return months.map((date, idx) => ({
+    date,
+    value: inv.currentPrice * (0.92 + idx * 0.04),
+  }))
 }

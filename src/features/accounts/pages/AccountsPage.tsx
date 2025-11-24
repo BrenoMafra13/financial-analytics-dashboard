@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useAccounts } from '../hooks/useAccounts'
 import type { Account } from '@/types'
+import { NewAccountForm } from '../components/NewAccountForm'
 
 const typeLabels: Record<Account['type'], string> = {
   CHECKING: 'Checking',
@@ -57,7 +58,7 @@ export function AccountsPage() {
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 space-y-4">
           <Card className="p-0">
             <CardHeader className="px-6 py-4">
               <CardTitle className="text-lg">Balances by account</CardTitle>
@@ -78,6 +79,7 @@ export function AccountsPage() {
               </ResponsiveContainer>
             </CardContent>
           </Card>
+          <NewAccountForm />
         </div>
 
         <div className="space-y-3">

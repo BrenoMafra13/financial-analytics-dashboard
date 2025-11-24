@@ -5,7 +5,8 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useTransactions } from '@/features/dashboard/hooks/useTransactions'
-import { categories } from '@/services/categories'
+import { useQuery } from '@tanstack/react-query'
+import { fetchCategories } from '@/services/categories'
 import type { Transaction } from '@/types'
 
 function formatCurrency(value: number, currency: string) {
@@ -24,14 +25,11 @@ function typeBadge(tx: Transaction) {
   )
 }
 
-function categoryLabel(categoryId: string) {
-  return categories.find((c) => c.id === categoryId)?.name ?? 'Other'
-}
-
 export function TransactionsTable() {
   const [page, setPage] = useState(1)
   const pageSize = 6
   const { data, isLoading, isError } = useTransactions(page, pageSize)
+  const categoriesCache = useQuery({ queryKey: ['categories'], queryFn: fetchCategories })
 
   const rows = useMemo(() => data?.items ?? [], [data])
 
@@ -66,7 +64,9 @@ export function TransactionsTable() {
                 >
                   <td className="px-6 py-3 text-surface-500 dark:text-slate-300">{formatDate(tx.date)}</td>
                   <td className="px-6 py-3 text-surface-900 dark:text-white">{tx.description}</td>
-                  <td className="px-6 py-3 text-surface-500 dark:text-slate-300">{categoryLabel(tx.categoryId)}</td>
+                  <td className="px-6 py-3 text-surface-500 dark:text-slate-300">
+                    {categoriesCache.data?.find((c) => c.id === tx.categoryId)?.name ?? 'Other'}
+                  </td>
                   <td className="px-6 py-3">{typeBadge(tx)}</td>
                   <td
                     className={`px-6 py-3 text-right font-semibold ${

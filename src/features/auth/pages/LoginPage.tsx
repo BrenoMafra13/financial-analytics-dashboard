@@ -10,17 +10,26 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
-import { login } from '@/services'
+import { guestLogin, login } from '@/services'
 import { useUserStore } from '@/store/user'
 
 export function LoginPage() {
   const navigate = useNavigate()
-  const setUser = useUserStore((state) => state.setUser)
+  const setAuth = useUserStore((state) => state.setAuth)
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    const user = await login()
-    setUser(user)
+    const form = new FormData(event.currentTarget)
+    const email = String(form.get('email') || '')
+    const password = String(form.get('password') || '')
+    const { user, token } = await login({ email, password })
+    setAuth(user, token)
+    navigate('/dashboard')
+  }
+
+  const handleGuest = async () => {
+    const { user, token } = await guestLogin()
+    setAuth(user, token)
     navigate('/dashboard')
   }
 
@@ -37,17 +46,23 @@ export function LoginPage() {
           <CardContent className="space-y-4">
             <label htmlFor="email" className="space-y-2 text-sm font-medium text-slate-300">
               Email
-              <Input id="email" name="email" type="email" placeholder="you@email.com" required />
+              <Input id="email" name="email" type="email" placeholder="demo@breno.finance" required />
             </label>
             <label htmlFor="password" className="space-y-2 text-sm font-medium text-slate-300">
               Password
-              <Input id="password" name="password" type="password" placeholder="••••••••" required />
+              <Input id="password" name="password" type="password" placeholder="demo123" required />
             </label>
           </CardContent>
 
           <CardFooter className="block">
             <Button type="submit" className="w-full">
               Access dashboard
+            </Button>
+            <Button type="button" variant="secondary" className="mt-3 w-full" onClick={() => navigate('/signup')}>
+              Create an account
+            </Button>
+            <Button type="button" variant="ghost" className="mt-3 w-full" onClick={handleGuest}>
+              Continue as guest
             </Button>
           </CardFooter>
         </form>

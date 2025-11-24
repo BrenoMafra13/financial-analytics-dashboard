@@ -1,45 +1,12 @@
-import { simulateRequest } from './client'
+import { api } from './http'
 import type { Account } from '@/types'
 
-const accounts: Account[] = [
-  {
-    id: 'acc-1',
-    name: 'Checking',
-    institution: 'Breno Bank',
-    type: 'CHECKING',
-    currency: 'USD',
-    balance: 8200,
-    lastUpdated: '2025-01-01',
-  },
-  {
-    id: 'acc-2',
-    name: 'High-Yield Savings',
-    institution: 'Breno Bank',
-    type: 'SAVINGS',
-    currency: 'USD',
-    balance: 18500,
-    lastUpdated: '2025-01-01',
-  },
-  {
-    id: 'acc-3',
-    name: 'Brokerage',
-    institution: 'Breno Invest',
-    type: 'BROKERAGE',
-    currency: 'USD',
-    balance: 40250,
-    lastUpdated: '2025-01-01',
-  },
-  {
-    id: 'acc-4',
-    name: 'Credit Card',
-    institution: 'Breno Card',
-    type: 'CREDIT_CARD',
-    currency: 'USD',
-    balance: -950,
-    lastUpdated: '2025-01-01',
-  },
-]
-
 export async function fetchAccounts() {
-  return simulateRequest({ data: accounts })
+  const { data } = await api.get<Account[]>('/accounts')
+  return data
+}
+
+export async function createAccount(payload: Omit<Account, 'id' | 'lastUpdated' | 'balance'> & { balance: number }) {
+  const { data } = await api.post<Account>('/accounts', payload)
+  return data
 }
