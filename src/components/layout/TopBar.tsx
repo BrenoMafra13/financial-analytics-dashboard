@@ -1,8 +1,9 @@
-import { Bell, ChevronDown } from 'lucide-react'
+import { Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { ThemeToggle } from './ThemeToggle'
 import { useFilterStore } from '@/store/filters'
+import { UserMenu } from './UserMenu'
 
 const periodOptions = [
   { value: '7d', label: 'Last 7 days' },
@@ -25,7 +26,7 @@ export function TopBar() {
   const setType = useFilterStore((state) => state.setType)
 
   return (
-    <header className="flex flex-wrap items-center justify-between gap-4 border-b border-surface-200 bg-white/70 px-6 py-4 text-surface-900 backdrop-blur dark:border-white/5 dark:bg-surface-950/60 dark:text-white">
+    <header className="relative z-20 flex flex-wrap items-center justify-between gap-4 border-b border-surface-200 bg-white/70 px-6 py-4 text-surface-900 backdrop-blur dark:border-white/5 dark:bg-surface-950/60 dark:text-white">
       <div className="flex flex-col gap-1">
         <p className="text-xs uppercase tracking-[0.4em] text-brand-500 dark:text-brand-300">Overview</p>
         <h1 className="text-xl font-semibold">Breno Finance</h1>
@@ -75,14 +76,7 @@ export function TopBar() {
           <Bell className="h-4 w-4" />
         </Button>
         <ThemeToggle />
-        <div className="flex items-center gap-2 rounded-full border border-surface-200 bg-white/80 px-3 py-1.5 text-surface-900 dark:border-white/10 dark:bg-white/5 dark:text-white">
-          <div className="h-9 w-9 rounded-full bg-gradient-brand" />
-          <div className="text-left text-sm leading-tight">
-            <p className="font-semibold">Breno Mafra</p>
-            <p className="text-xs text-surface-500 dark:text-slate-400">Premium</p>
-          </div>
-          <ChevronDown className="h-4 w-4 text-surface-400 dark:text-slate-400" />
-        </div>
+        <UserMenu />
       </div>
     </header>
   )

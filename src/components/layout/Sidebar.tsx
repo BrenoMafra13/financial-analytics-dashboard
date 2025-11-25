@@ -1,9 +1,8 @@
-import { NavLink, useNavigate } from 'react-router-dom'
-import { CreditCard, LayoutDashboard, LineChart, LogOut, Settings, Wallet } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { NavLink } from 'react-router-dom'
+import { CreditCard, LayoutDashboard, LineChart, Settings, Wallet } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/utils/cn'
-import { useUserStore } from '@/store/user'
+import { useCashflow } from '@/hooks/useCashflow'
 
 const navigation = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
@@ -14,13 +13,7 @@ const navigation = [
 ]
 
 export function Sidebar() {
-  const navigate = useNavigate()
-  const logout = useUserStore((state) => state.logout)
-
-  const handleLogout = () => {
-    logout()
-    navigate('/login')
-  }
+  const { data: cashflow } = useCashflow(30)
 
   return (
     <aside className="hidden w-72 flex-col border-r border-surface-100 bg-white/80 px-5 py-8 text-surface-700 shadow-card backdrop-blur-xl dark:border-white/5 dark:bg-surface-950/90 dark:text-white lg:flex">
@@ -57,20 +50,13 @@ export function Sidebar() {
       <div className="mt-12 space-y-4 text-center">
         <div className="rounded-3xl border border-surface-100 bg-white/80 p-5 text-surface-900 shadow-card dark:border-white/10 dark:bg-white/5 dark:text-white">
           <p className="text-xs uppercase tracking-[0.3em] text-surface-500 dark:text-white/60">Monthly cash flow</p>
-          <p className="mt-2 text-3xl font-semibold">$18,450</p>
-          <Badge variant="success" className="mt-3 w-fit px-3">
-            +12.4% vs last month
+          <p className="mt-2 text-3xl font-semibold">
+            {cashflow ? `${cashflow.net >= 0 ? '' : '-'}${cashflow.currency} ${Math.abs(cashflow.net).toLocaleString()}` : '—'}
+          </p>
+          <Badge variant={cashflow && cashflow.net >= 0 ? 'success' : 'danger'} className="mt-3 w-fit px-3">
+            {cashflow ? `${cashflow.days}d income ${cashflow.income.toLocaleString()} • expense ${cashflow.expense.toLocaleString()}` : 'Loading...'}
           </Badge>
         </div>
-
-        <Button
-          variant="ghost"
-          className="w-full gap-2 border border-surface-100 bg-white/70 text-surface-700 hover:text-danger dark:border-white/10 dark:bg-white/5 dark:text-white"
-          onClick={handleLogout}
-        >
-          <LogOut className="h-4 w-4" />
-          Logout
-        </Button>
       </div>
     </aside>
   )

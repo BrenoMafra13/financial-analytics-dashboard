@@ -51,6 +51,7 @@ export function LoginPage() {
             <label htmlFor="password" className="space-y-2 text-sm font-medium text-slate-300">
               Password
               <Input id="password" name="password" type="password" placeholder="demo123" required />
+              <p className="text-xs text-surface-500">Min 4 characters.</p>
             </label>
           </CardContent>
 

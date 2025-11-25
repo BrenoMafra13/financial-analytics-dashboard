@@ -24,7 +24,8 @@ function bootstrap() {
       name TEXT NOT NULL,
       currency TEXT NOT NULL,
       locale TEXT NOT NULL,
-      tier TEXT NOT NULL
+      tier TEXT NOT NULL,
+      avatarUrl TEXT
     );
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY,
@@ -111,6 +112,15 @@ function bootstrap() {
       investments.forEach((inv) => insertInvestment.run(inv))
     })
     tx()
+  }
+
+  try {
+    const hasAvatar = db.prepare("PRAGMA table_info('users')").all().some((col) => col.name === 'avatarUrl')
+    if (!hasAvatar) {
+      db.prepare('ALTER TABLE users ADD COLUMN avatarUrl TEXT').run()
+    }
+  } catch (err) {
+    // ignore migration errors
   }
 }
 

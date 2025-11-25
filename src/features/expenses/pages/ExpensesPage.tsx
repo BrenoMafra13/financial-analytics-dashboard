@@ -52,7 +52,12 @@ export function ExpensesPage() {
         </Badge>
       </div>
 
-      <TransactionFiltersBar />
+      <div className="space-y-2">
+        <h3 className="text-sm font-semibold uppercase tracking-[0.2em] text-surface-500 dark:text-slate-300">
+          Search expenses
+        </h3>
+        <TransactionFiltersBar />
+      </div>
       <NewTransactionForm />
 
       <div className="grid gap-4 lg:grid-cols-3">

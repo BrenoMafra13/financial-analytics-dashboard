@@ -44,7 +44,7 @@ app.get('/categories', (_req, res) => {
 })
 
 app.post('/auth/login', (req, res) => {
-  const schema = z.object({ email: z.string().email(), password: z.string().min(4) })
+  const schema = z.object({ email: z.string().min(3), password: z.string().min(4) })
   const parsed = schema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ message: 'Invalid credentials' })
 
@@ -65,7 +65,7 @@ app.post('/auth/guest', (_req, res) => {
 
 app.post('/auth/register', (req, res) => {
   const schema = z.object({
-    email: z.string().email(),
+    email: z.string().min(3),
     password: z.string().min(6),
     name: z.string().min(2),
     currency: z.enum(['USD', 'CAD']),
@@ -114,6 +114,30 @@ app.get('/me', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId)
   if (!user) return res.status(404).json({ message: 'User not found' })
   res.json(sanitizeUser(user))
+})
+
+app.put('/me', (req, res) => {
+  const schema = z.object({
+    name: z.string().min(2),
+    email: z.string().min(3),
+    currency: z.enum(['USD', 'CAD']),
+    locale: z.string().min(2),
+    avatarUrl: z.string().optional(),
+  })
+  const parsed = schema.safeParse(req.body)
+  if (!parsed.success) return res.status(400).json({ message: 'Invalid payload' })
+
+  db.prepare('UPDATE users SET name = ?, email = ?, currency = ?, locale = ?, avatarUrl = ? WHERE id = ?').run(
+    parsed.data.name,
+    parsed.data.email,
+    parsed.data.currency,
+    parsed.data.locale,
+    parsed.data.avatarUrl ?? null,
+    req.userId,
+  )
+
+  const updated = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId)
+  res.json(sanitizeUser(updated))
 })
 
 app.get('/accounts', (req, res) => {
@@ -402,6 +426,108 @@ app.get('/kpis', (req, res) => {
   const currency = accounts[0]?.currency || 'USD'
 
   res.json({ totalBalance, investedAmount, monthlyExpenses, netWorthChangePct, currency })
+})
+
+app.get('/cashflow', (req, res) => {
+  const days = Number(req.query.days || 30)
+  const since = new Date()
+  since.setDate(since.getDate() - days)
+  const sinceIso = since.toISOString().slice(0, 10)
+  const txs = db.prepare('SELECT * FROM transactions WHERE userId = ? AND date >= ?').all(req.userId, sinceIso)
+  const income = txs.filter((t) => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
+  const expense = Math.abs(txs.filter((t) => t.amount < 0).reduce((sum, t) => sum + t.amount, 0))
+  const net = income - expense
+  const currency = txs[0]?.currency || db.prepare('SELECT currency FROM accounts WHERE userId = ? LIMIT 1').get(req.userId)?.currency || 'USD'
+  res.json({ income, expense, net, currency, days })
+})
+
+app.get('/net-worth', async (req, res) => {
+  try {
+    const daysParam = Number(req.query.days || 90)
+    const days = Math.min(365, Math.max(7, daysParam))
+    const today = new Date()
+    today.setUTCHours(12, 0, 0, 0)
+    const start = new Date(today)
+    start.setUTCDate(today.getUTCDate() - (days - 1))
+
+    const toIso = (date) => date.toISOString().slice(0, 10)
+    const startIso = toIso(start)
+
+    const dates = []
+    for (let cursor = new Date(start); cursor <= today; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+      dates.push(toIso(cursor))
+    }
+
+    const accounts = db.prepare('SELECT * FROM accounts WHERE userId = ?').all(req.userId)
+    const transactions = db.prepare('SELECT * FROM transactions WHERE userId = ?').all(req.userId)
+    const investmentRows = db.prepare('SELECT * FROM investments WHERE userId = ?').all(req.userId)
+
+    const investments = await Promise.all(
+      investmentRows.map(async (inv) => {
+        if (inv.type === 'CRYPTO') {
+          const live = await fetchCryptoPriceAndHistory(inv.symbol, inv.currency)
+          if (live) return { ...inv, currentPrice: live.currentPrice, history: live.history }
+        }
+        if (inv.type === 'STOCK') {
+          const quote = await fetchStockQuote(inv.symbol, inv.currency)
+          if (quote) return { ...inv, currentPrice: quote.currentPrice, history: quote.history }
+        }
+        return { ...inv, history: buildFallbackHistory(inv.currentPrice) }
+      }),
+    )
+
+    const currency = accounts[0]?.currency || investments[0]?.currency || 'USD'
+
+    const txSumByAccount = transactions.reduce((acc, tx) => {
+      acc[tx.accountId] = (acc[tx.accountId] || 0) + tx.amount
+      return acc
+    }, {})
+
+    const initialAccountValue = accounts.reduce((sum, acc) => sum + acc.balance - (txSumByAccount[acc.id] || 0), 0)
+    const preRangeTx = transactions
+      .filter((tx) => tx.date < startIso)
+      .reduce((sum, tx) => sum + tx.amount, 0)
+    const dailyTx = transactions.reduce((map, tx) => {
+      map[tx.date] = (map[tx.date] || 0) + tx.amount
+      return map
+    }, {})
+
+    const sortedHistory = (history) => (history || []).slice().sort((a, b) => a.date.localeCompare(b.date))
+    const priceForDate = (inv, date) => {
+      const history = sortedHistory(inv.history)
+      if (!history.length) return inv.currentPrice
+      let lastPrice = history[0].value
+      for (const point of history) {
+        if (point.date <= date) {
+          lastPrice = point.value
+        } else {
+          break
+        }
+      }
+      const numeric = Number(lastPrice)
+      if (Number.isFinite(numeric)) return numeric
+      const fallback = Number(inv.currentPrice)
+      return Number.isFinite(fallback) ? fallback : 0
+    }
+
+    let runningAccounts = initialAccountValue + preRangeTx
+    const points = dates.map((date) => {
+      runningAccounts += dailyTx[date] || 0
+      const investmentsValue = investments.reduce((sum, inv) => sum + inv.quantity * priceForDate(inv, date), 0)
+      const total = runningAccounts + investmentsValue
+      return {
+        date,
+        accounts: Number(runningAccounts.toFixed(2)),
+        investments: Number(investmentsValue.toFixed(2)),
+        total: Number(total.toFixed(2)),
+      }
+    })
+
+    res.json({ currency, points })
+  } catch (err) {
+    console.error('Net worth error', err)
+    res.status(500).json({ message: 'Unable to build net worth history' })
+  }
 })
 
 function sanitizeUser(user) {
