@@ -11,7 +11,7 @@ bootstrap()
 
 const app = express()
 app.use(cors())
-app.use(express.json())
+app.use(express.json({ limit: '5mb' }))
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 const PORT = process.env.PORT || 4000
@@ -59,8 +59,9 @@ app.post('/auth/login', (req, res) => {
 
 app.post('/auth/guest', (_req, res) => {
   const user = db.prepare('SELECT * FROM users LIMIT 1').get()
-  const token = signToken(user.id)
-  res.json({ token, user: sanitizeUser(user) })
+  const guest = { ...user, name: 'Guest', email: 'guest@gmail.com' }
+  const token = signToken(guest.id)
+  res.json({ token, user: sanitizeUser(guest) })
 })
 
 app.post('/auth/register', (req, res) => {
@@ -85,9 +86,10 @@ app.post('/auth/register', (req, res) => {
     currency: parsed.data.currency,
     locale: parsed.data.locale,
     tier: 'standard',
+    budget: 2000,
   }
   db.prepare(
-    'INSERT INTO users (id, email, passwordHash, name, currency, locale, tier) VALUES (@id, @email, @passwordHash, @name, @currency, @locale, @tier)'
+    'INSERT INTO users (id, email, passwordHash, name, currency, locale, tier, budget) VALUES (@id, @email, @passwordHash, @name, @currency, @locale, @tier, @budget)'
   ).run(user)
 
   const account = {
@@ -123,16 +125,18 @@ app.put('/me', (req, res) => {
     currency: z.enum(['USD', 'CAD']),
     locale: z.string().min(2),
     avatarUrl: z.string().optional(),
+    budget: z.number().nonnegative().optional(),
   })
   const parsed = schema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ message: 'Invalid payload' })
 
-  db.prepare('UPDATE users SET name = ?, email = ?, currency = ?, locale = ?, avatarUrl = ? WHERE id = ?').run(
+  db.prepare('UPDATE users SET name = ?, email = ?, currency = ?, locale = ?, avatarUrl = ?, budget = COALESCE(?, budget) WHERE id = ?').run(
     parsed.data.name,
     parsed.data.email,
     parsed.data.currency,
     parsed.data.locale,
     parsed.data.avatarUrl ?? null,
+    parsed.data.budget,
     req.userId,
   )
 
@@ -378,22 +382,95 @@ function fallbackMarketAssets() {
   ]
 }
 
+async function loadInvestmentsWithPrices(userId) {
+  const rows = db.prepare('SELECT * FROM investments WHERE userId = ?').all(userId)
+  return Promise.all(
+    rows.map(async (inv) => {
+      if (inv.type === 'CRYPTO') {
+        const live = await fetchCryptoPriceAndHistory(inv.symbol, inv.currency)
+        if (live) return { ...inv, currentPrice: live.currentPrice, history: live.history }
+      }
+      if (inv.type === 'STOCK') {
+        const quote = await fetchStockQuote(inv.symbol, inv.currency)
+        if (quote) return { ...inv, currentPrice: quote.currentPrice, history: quote.history }
+      }
+      return { ...inv, history: buildFallbackHistory(inv.currentPrice) }
+    }),
+  )
+}
+
+async function buildNetWorthPoints(userId, days = 90) {
+  const daysClamped = Math.min(365, Math.max(7, days))
+  const today = new Date()
+  today.setUTCHours(12, 0, 0, 0)
+  const start = new Date(today)
+  start.setUTCDate(today.getUTCDate() - (daysClamped - 1))
+
+  const toIso = (date) => date.toISOString().slice(0, 10)
+  const startIso = toIso(start)
+
+  const dates = []
+  for (let cursor = new Date(start); cursor <= today; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    dates.push(toIso(cursor))
+  }
+
+  const accounts = db.prepare('SELECT * FROM accounts WHERE userId = ?').all(userId)
+  const transactions = db.prepare('SELECT * FROM transactions WHERE userId = ?').all(userId)
+  const investments = await loadInvestmentsWithPrices(userId)
+
+  const currency = accounts[0]?.currency || investments[0]?.currency || 'USD'
+
+  const txSumByAccount = transactions.reduce((acc, tx) => {
+    acc[tx.accountId] = (acc[tx.accountId] || 0) + tx.amount
+    return acc
+  }, {})
+
+  const initialAccountValue = accounts.reduce((sum, acc) => sum + acc.balance - (txSumByAccount[acc.id] || 0), 0)
+  const preRangeTx = transactions
+    .filter((tx) => tx.date < startIso)
+    .reduce((sum, tx) => sum + tx.amount, 0)
+  const dailyTx = transactions.reduce((map, tx) => {
+    map[tx.date] = (map[tx.date] || 0) + tx.amount
+    return map
+  }, {})
+
+  const sortedHistory = (history) => (history || []).slice().sort((a, b) => a.date.localeCompare(b.date))
+  const priceForDate = (inv, date) => {
+    const history = sortedHistory(inv.history)
+    if (!history.length) return inv.currentPrice
+    let lastPrice = history[0].value
+    for (const point of history) {
+      if (point.date <= date) {
+        lastPrice = point.value
+      } else {
+        break
+      }
+    }
+    const numeric = Number(lastPrice)
+    if (Number.isFinite(numeric)) return numeric
+    const fallback = Number(inv.currentPrice)
+    return Number.isFinite(fallback) ? fallback : 0
+  }
+
+  let runningAccounts = initialAccountValue + preRangeTx
+  const points = dates.map((date) => {
+    runningAccounts += dailyTx[date] || 0
+    const investmentsValue = investments.reduce((sum, inv) => sum + inv.quantity * priceForDate(inv, date), 0)
+    const total = runningAccounts + investmentsValue
+    return {
+      date,
+      accounts: Number(runningAccounts.toFixed(2)),
+      investments: Number(investmentsValue.toFixed(2)),
+      total: Number(total.toFixed(2)),
+    }
+  })
+
+  return { currency, points, investments }
+}
+
 app.get('/investments', async (req, res) => {
   try {
-    const rows = db.prepare('SELECT * FROM investments WHERE userId = ?').all(req.userId)
-    const enriched = await Promise.all(
-      rows.map(async (inv) => {
-        if (inv.type === 'CRYPTO') {
-          const live = await fetchCryptoPriceAndHistory(inv.symbol, inv.currency)
-          if (live) return { ...inv, currentPrice: live.currentPrice, history: live.history }
-        }
-        if (inv.type === 'STOCK') {
-          const quote = await fetchStockQuote(inv.symbol)
-          if (quote) return { ...inv, currentPrice: quote.currentPrice, history: quote.history }
-        }
-        return { ...inv, history: buildFallbackHistory(inv.currentPrice) }
-      }),
-    )
+    const enriched = await loadInvestmentsWithPrices(req.userId)
     res.json(enriched)
   } catch (err) {
     console.error('Investments fetch error', err)
@@ -413,19 +490,34 @@ app.get('/market/assets', async (_req, res) => {
 })
 
 app.get('/kpis', (req, res) => {
-  const accounts = db.prepare('SELECT * FROM accounts WHERE userId = ?').all(req.userId)
-  const transactions = db.prepare('SELECT * FROM transactions WHERE userId = ?').all(req.userId)
-  const investedAmount = db.prepare('SELECT SUM(quantity * currentPrice) as total FROM investments WHERE userId = ?').get(req.userId).total || 0
-  const monthlyExpenses = Math.abs(
-    transactions
-      .filter((t) => t.amount < 0)
-      .reduce((sum, t) => sum + t.amount, 0)
-  )
-  const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0)
-  const netWorthChangePct = 6.4
-  const currency = accounts[0]?.currency || 'USD'
+  ;(async () => {
+    try {
+      const accounts = db.prepare('SELECT * FROM accounts WHERE userId = ?').all(req.userId)
+      const transactions = db.prepare('SELECT * FROM transactions WHERE userId = ?').all(req.userId)
+      const { currency, points, investments } = await buildNetWorthPoints(req.userId, 90)
+      const investedAmount = investments.reduce((sum, inv) => sum + inv.quantity * inv.currentPrice, 0)
+      const monthlyExpenses = Math.abs(
+        transactions
+          .filter((t) => t.amount < 0)
+          .filter((t) => {
+            const txDate = new Date(t.date)
+            const start = new Date()
+            start.setDate(start.getDate() - 30)
+            return txDate >= start
+          })
+          .reduce((sum, t) => sum + t.amount, 0),
+      )
+      const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0)
+      const first = points.at(0)?.total || 0
+      const last = points.at(-1)?.total || totalBalance + investedAmount
+      const netWorthChangePct = first === 0 ? 0 : Number((((last - first) / Math.abs(first)) * 100).toFixed(2))
 
-  res.json({ totalBalance, investedAmount, monthlyExpenses, netWorthChangePct, currency })
+      res.json({ totalBalance, investedAmount, monthlyExpenses, netWorthChangePct, currency })
+    } catch (err) {
+      console.error('KPIs error', err)
+      res.status(500).json({ message: 'Unable to load KPIs' })
+    }
+  })()
 })
 
 app.get('/cashflow', (req, res) => {
@@ -444,86 +536,9 @@ app.get('/cashflow', (req, res) => {
 app.get('/net-worth', async (req, res) => {
   try {
     const daysParam = Number(req.query.days || 90)
-    const days = Math.min(365, Math.max(7, daysParam))
-    const today = new Date()
-    today.setUTCHours(12, 0, 0, 0)
-    const start = new Date(today)
-    start.setUTCDate(today.getUTCDate() - (days - 1))
+    const history = await buildNetWorthPoints(req.userId, daysParam)
 
-    const toIso = (date) => date.toISOString().slice(0, 10)
-    const startIso = toIso(start)
-
-    const dates = []
-    for (let cursor = new Date(start); cursor <= today; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
-      dates.push(toIso(cursor))
-    }
-
-    const accounts = db.prepare('SELECT * FROM accounts WHERE userId = ?').all(req.userId)
-    const transactions = db.prepare('SELECT * FROM transactions WHERE userId = ?').all(req.userId)
-    const investmentRows = db.prepare('SELECT * FROM investments WHERE userId = ?').all(req.userId)
-
-    const investments = await Promise.all(
-      investmentRows.map(async (inv) => {
-        if (inv.type === 'CRYPTO') {
-          const live = await fetchCryptoPriceAndHistory(inv.symbol, inv.currency)
-          if (live) return { ...inv, currentPrice: live.currentPrice, history: live.history }
-        }
-        if (inv.type === 'STOCK') {
-          const quote = await fetchStockQuote(inv.symbol, inv.currency)
-          if (quote) return { ...inv, currentPrice: quote.currentPrice, history: quote.history }
-        }
-        return { ...inv, history: buildFallbackHistory(inv.currentPrice) }
-      }),
-    )
-
-    const currency = accounts[0]?.currency || investments[0]?.currency || 'USD'
-
-    const txSumByAccount = transactions.reduce((acc, tx) => {
-      acc[tx.accountId] = (acc[tx.accountId] || 0) + tx.amount
-      return acc
-    }, {})
-
-    const initialAccountValue = accounts.reduce((sum, acc) => sum + acc.balance - (txSumByAccount[acc.id] || 0), 0)
-    const preRangeTx = transactions
-      .filter((tx) => tx.date < startIso)
-      .reduce((sum, tx) => sum + tx.amount, 0)
-    const dailyTx = transactions.reduce((map, tx) => {
-      map[tx.date] = (map[tx.date] || 0) + tx.amount
-      return map
-    }, {})
-
-    const sortedHistory = (history) => (history || []).slice().sort((a, b) => a.date.localeCompare(b.date))
-    const priceForDate = (inv, date) => {
-      const history = sortedHistory(inv.history)
-      if (!history.length) return inv.currentPrice
-      let lastPrice = history[0].value
-      for (const point of history) {
-        if (point.date <= date) {
-          lastPrice = point.value
-        } else {
-          break
-        }
-      }
-      const numeric = Number(lastPrice)
-      if (Number.isFinite(numeric)) return numeric
-      const fallback = Number(inv.currentPrice)
-      return Number.isFinite(fallback) ? fallback : 0
-    }
-
-    let runningAccounts = initialAccountValue + preRangeTx
-    const points = dates.map((date) => {
-      runningAccounts += dailyTx[date] || 0
-      const investmentsValue = investments.reduce((sum, inv) => sum + inv.quantity * priceForDate(inv, date), 0)
-      const total = runningAccounts + investmentsValue
-      return {
-        date,
-        accounts: Number(runningAccounts.toFixed(2)),
-        investments: Number(investmentsValue.toFixed(2)),
-        total: Number(total.toFixed(2)),
-      }
-    })
-
-    res.json({ currency, points })
+    res.json({ currency: history.currency, points: history.points })
   } catch (err) {
     console.error('Net worth error', err)
     res.status(500).json({ message: 'Unable to build net worth history' })
@@ -575,12 +590,17 @@ app.post('/investments/trade', async (req, res) => {
   if (!account) return res.status(404).json({ message: 'Account not found' })
   if (account.currency !== parsed.data.currency) return res.status(400).json({ message: 'Account currency mismatch' })
 
-  let livePrice = parsed.data.type === 'CRYPTO'
-    ? await fetchCryptoPriceAndHistory(parsed.data.symbol, parsed.data.currency).then((r) => r?.currentPrice)
-    : parsed.data.type === 'STOCK'
-      ? (await fetchStockQuote(parsed.data.symbol))?.currentPrice
-      : null
-  if (!livePrice) livePrice = 1
+  let livePrice = null
+  try {
+    livePrice = parsed.data.type === 'CRYPTO'
+      ? await fetchCryptoPriceAndHistory(parsed.data.symbol, parsed.data.currency).then((r) => r?.currentPrice)
+      : parsed.data.type === 'STOCK'
+        ? (await fetchStockQuote(parsed.data.symbol, parsed.data.currency))?.currentPrice
+        : null
+  } catch (err) {
+    console.error('Trade price lookup failed', err)
+  }
+  if (!livePrice) livePrice = fallbackPrices[parsed.data.symbol] || 1
 
   const cost = livePrice * parsed.data.quantity
 

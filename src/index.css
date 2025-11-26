@@ -2,11 +2,26 @@
 @tailwind components;
 @tailwind utilities;
 
-body {
-  @apply bg-gray-900 text-white;
+:root {
+  color-scheme: light;
+  background-color: #f9fafb;
+  color: #0f172a;
 }
 
+body {
+  background-color: #f9fafb;
+  color: #0f172a;
+  transition: background-color 150ms ease, color 150ms ease;
+}
 
+.dark {
+  color-scheme: dark;
+}
+
+.dark body {
+  background-color: #050b16;
+  color: #e5e7eb;
+}
 
 
 

@@ -11,13 +11,8 @@ import { useExpenseBreakdown } from '@/features/dashboard/hooks/useExpenseBreakd
 import { useExpenseTransactions } from '../hooks/useExpenseTransactions'
 import { TransactionFiltersBar } from '@/components/filters/TransactionFiltersBar'
 import { NewTransactionForm } from '@/features/transactions/components/NewTransactionForm'
-
-const budgetAmount = 2000
-const budgetCurrency = 'USD'
-
-function formatCurrency(value: number, currency: string) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value)
-}
+import { useCurrency } from '@/hooks/useCurrency'
+import { useUserStore } from '@/store/user'
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(date))
@@ -25,30 +20,40 @@ function formatDate(date: string) {
 
 export function ExpensesPage() {
   const [page, setPage] = useState(1)
+  const { format, convert, currency } = useCurrency()
+  const user = useUserStore((state) => state.user)
   const pageSize = 6
   const { data: breakdown, isLoading: loadingBreakdown, isError: errorBreakdown } = useExpenseBreakdown()
   const { data: expenses, isLoading, isError } = useExpenseTransactions(page, pageSize)
   const categoriesQuery = useQuery({ queryKey: ['categories'], queryFn: fetchCategories })
 
+  const budgetAmount = user?.budget ?? 2000
+  const budgetCurrency = (user?.currency as 'USD' | 'CAD') ?? 'USD'
+
   const spent = useMemo(() => {
     const items = expenses?.items ?? []
-    const sum = items.reduce((acc, tx) => acc + Math.abs(tx.amount), 0)
-    const currency = items[0]?.currency ?? budgetCurrency
+    const sum = items.reduce((acc, tx) => acc + Math.abs(convert(tx.amount, tx.currency as 'USD' | 'CAD')), 0)
     return { sum, currency }
-  }, [expenses])
+  }, [convert, currency, expenses])
+
+  const convertedBudget = useMemo(
+    () => convert(budgetAmount, budgetCurrency as 'USD' | 'CAD'),
+    [budgetAmount, budgetCurrency, convert],
+  )
 
   const progress = useMemo(() => {
     if (!spent) return 0
-    return Math.min(100, (spent.sum / budgetAmount) * 100)
-  }, [spent])
+    const budget = convertedBudget || budgetAmount
+    return Math.min(100, (spent.sum / budget) * 100)
+  }, [convertedBudget, spent])
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-2xl font-semibold text-surface-900 dark:text-white">Expenses</h2>
-        <Badge variant="danger">
-          Budget: {formatCurrency(budgetAmount, budgetCurrency)} • Spent:{' '}
-          {formatCurrency(spent.sum ?? 0, spent.currency ?? budgetCurrency)}
+      <div className="flex flex-wrap items-center gap-4">
+        <h2 className="text-3xl font-bold text-surface-900 dark:text-white">Expenses</h2>
+        <Badge variant="danger" className="text-sm font-semibold px-4 py-2 bg-white text-surface-900 shadow-sm dark:bg-surface-800 dark:text-white">
+          Budget: <span className="font-bold">{format(convertedBudget, currency)}</span> • Spent:{' '}
+          <span className="font-bold">{format(spent.sum ?? 0, currency)}</span>
         </Badge>
       </div>
 
@@ -87,7 +92,7 @@ export function ExpensesPage() {
                   <div key={item.categoryId} className="rounded-2xl border border-surface-100 p-4 dark:border-white/10">
                     <p className="text-sm font-semibold text-surface-900 dark:text-white">{item.label}</p>
                     <p className="text-lg font-semibold text-surface-900 dark:text-white">
-                      {formatCurrency(item.value, budgetCurrency)}
+                      {format(convert(item.value, budgetCurrency as 'USD' | 'CAD'), currency)}
                     </p>
                     <div className="mt-2 h-2.5 rounded-full bg-surface-100 dark:bg-white/10">
                       <div
@@ -109,11 +114,11 @@ export function ExpensesPage() {
           <CardContent className="space-y-3 px-6 pb-6">
             <div className="flex items-center justify-between text-sm font-semibold text-surface-900 dark:text-white">
               <span>Budget</span>
-              <span>{formatCurrency(budgetAmount, budgetCurrency)}</span>
+              <span>{format(convertedBudget, currency)}</span>
             </div>
             <div className="flex items-center justify-between text-sm font-semibold text-surface-900 dark:text-white">
               <span>Spent</span>
-              <span>{formatCurrency(spent.sum ?? 0, spent.currency ?? budgetCurrency)}</span>
+              <span>{format(spent.sum ?? 0, currency)}</span>
             </div>
             <div className="mt-2 h-3 rounded-full bg-surface-100 dark:bg-white/10">
               <div
@@ -121,9 +126,7 @@ export function ExpensesPage() {
                 style={{ width: `${progress}%` }}
               />
             </div>
-            <p className="text-sm text-surface-500 dark:text-slate-400">
-              {progress.toFixed(1)}% of your monthly budget used.
-            </p>
+            <p className="text-sm text-surface-500 dark:text-slate-400">{progress.toFixed(1)}% of your monthly budget used.</p>
           </CardContent>
         </Card>
       </div>
@@ -131,7 +134,7 @@ export function ExpensesPage() {
       <Card className="p-0">
         <CardHeader className="flex flex-row items-center justify-between px-6 py-4">
           <CardTitle>Recent expenses</CardTitle>
-          <p className="text-sm text-surface-500 dark:text-slate-400">
+          <p className="text-sm text-surface-600 dark:text-slate-200">
             Page {expenses?.page ?? 1} of {expenses?.totalPages ?? 1}
           </p>
         </CardHeader>
@@ -164,7 +167,7 @@ export function ExpensesPage() {
                           {categoriesQuery.data?.find((c) => c.id === tx.categoryId)?.name ?? 'Other'}
                         </td>
                         <td className="px-6 py-3 text-right font-semibold text-danger">
-                          {formatCurrency(tx.amount, tx.currency)}
+                          {format(tx.amount, tx.currency as 'USD' | 'CAD')}
                         </td>
                       </tr>
                     ))}

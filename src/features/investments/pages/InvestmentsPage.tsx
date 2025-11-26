@@ -6,6 +6,8 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useInvestments } from '../hooks/useInvestments'
 import type { Investment } from '@/types'
 import { MarketTradeForm } from '../components/MarketTradeForm'
+import { useCurrency } from '@/hooks/useCurrency'
+import { Button } from '@/components/ui/button'
 
 const typeLabels: Record<Investment['type'], string> = {
   STOCK: 'Stock',
@@ -15,19 +17,16 @@ const typeLabels: Record<Investment['type'], string> = {
   BOND: 'Bond',
 }
 
-function formatCurrency(value: number, currency: string) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value)
-}
-
 export function InvestmentsPage() {
   const { data = [], isLoading, isError, refetch } = useInvestments()
+  const { format, convert, currency } = useCurrency()
   const items = useMemo(() => data ?? [], [data])
 
   const totalInvested = useMemo(() => {
     if (!items.length) return null
-    const total = items.reduce((acc, inv) => acc + inv.quantity * inv.currentPrice, 0)
-    return { total, currency: items[0].currency }
-  }, [items])
+    const total = items.reduce((acc, inv) => acc + convert(inv.quantity * inv.currentPrice, inv.currency as 'USD' | 'CAD'), 0)
+    return { total, currency }
+  }, [convert, currency, items])
 
   const allocation = useMemo(() => {
     if (!items.length) return []
@@ -46,10 +45,12 @@ export function InvestmentsPage() {
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-2xl font-semibold text-surface-900 dark:text-white">Investments</h2>
+      <div className="flex flex-wrap items-center gap-4">
+        <h2 className="text-3xl font-bold text-surface-900 dark:text-white">Investments</h2>
         {data && totalInvested ? (
-          <Badge variant="success">Total: {formatCurrency(totalInvested.total, totalInvested.currency)}</Badge>
+          <Badge variant="success" className="px-4 py-2 text-base font-semibold bg-white text-surface-900 shadow-sm dark:bg-surface-800 dark:text-white">
+            Total: <span className="font-bold">{format(totalInvested.total, totalInvested.currency as 'USD' | 'CAD')}</span>
+          </Badge>
         ) : null}
       </div>
 
@@ -70,7 +71,7 @@ export function InvestmentsPage() {
         </Card>
       ) : items.length === 0 ? (
         <Card className="p-6">
-          <p className="text-sm text-surface-500 dark:text-slate-400">
+          <p className="text-sm text-surface-600 dark:text-slate-200">
             No investments yet. Add holdings to see performance and allocation.
           </p>
         </Card>
@@ -81,19 +82,28 @@ export function InvestmentsPage() {
               <CardTitle>Performance</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-6">
-              <ResponsiveContainer width="100%" height={260}>
-                <AreaChart data={items[0].history}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.3)" />
-                  <XAxis dataKey="date" stroke="currentColor" opacity={0.6} />
-                  <YAxis
-                    stroke="currentColor"
-                    opacity={0.6}
-                    tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
-                  />
-                  <Tooltip formatter={(v: number) => `$${v.toLocaleString()}`} />
-                  <Area type="monotone" dataKey="value" stroke="#38bdf8" fillOpacity={0.2} fill="#38bdf8" />
-                </AreaChart>
-              </ResponsiveContainer>
+              <div className="overflow-visible">
+                <ResponsiveContainer width="100%" height={260}>
+                  <AreaChart
+                    data={items[0].history.map((point) => ({
+                      ...point,
+                      value: convert(point.value, items[0].currency as 'USD' | 'CAD'),
+                    }))}
+                    margin={{ left: 60, right: 20, bottom: 12 }}
+                  >
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.3)" />
+                    <XAxis dataKey="date" stroke="currentColor" opacity={0.6} />
+                    <YAxis
+                      stroke="currentColor"
+                      opacity={0.6}
+                      width={70}
+                      tickFormatter={(v) => format(v as number, currency)}
+                    />
+                    <Tooltip formatter={(v: number) => format(v, currency)} />
+                    <Area type="monotone" dataKey="value" stroke="#38bdf8" fillOpacity={0.2} fill="#38bdf8" />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
 
@@ -107,16 +117,16 @@ export function InvestmentsPage() {
                   <div key={investment.id} className="flex items-center justify-between px-6 py-4">
                     <div>
                       <p className="text-sm font-semibold text-surface-900 dark:text-white">{investment.name}</p>
-                      <p className="text-xs uppercase tracking-[0.3em] text-surface-500 dark:text-slate-400">
+                      <p className="text-xs uppercase tracking-[0.3em] text-surface-600 dark:text-slate-200">
                         {investment.symbol} • {typeLabels[investment.type]}
                       </p>
                     </div>
                     <div className="text-right">
-                      <p className="text-sm text-surface-500 dark:text-slate-400">
-                        {investment.quantity} units • {formatCurrency(investment.currentPrice, investment.currency)}
+                      <p className="text-sm text-surface-600 dark:text-slate-200">
+                        {investment.quantity} units • {format(convert(investment.currentPrice, investment.currency as 'USD' | 'CAD'), currency)}
                       </p>
                       <p className="text-lg font-semibold text-surface-900 dark:text-white">
-                        {formatCurrency(investment.quantity * investment.currentPrice, investment.currency)}
+                        {format(convert(investment.quantity * investment.currentPrice, investment.currency as 'USD' | 'CAD'), currency)}
                       </p>
                     </div>
                   </div>

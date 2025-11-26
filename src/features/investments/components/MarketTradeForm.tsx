@@ -117,12 +117,12 @@ export function MarketTradeForm() {
               required
             />
             {selectedAsset ? (
-              <p className="text-sm text-surface-500 dark:text-slate-400">
+              <p className="text-sm text-surface-600 dark:text-slate-200">
                 Price: {selectedAsset.currentPrice.toFixed(2)} {selectedAsset.currency}
               </p>
             ) : null}
             {assetsEmpty ? (
-              <p className="text-sm text-surface-500 dark:text-slate-400">
+              <p className="text-sm text-surface-600 dark:text-slate-200">
                 No assets available. Try again shortly or use fallback list.
               </p>
             ) : null}
@@ -135,8 +135,8 @@ export function MarketTradeForm() {
               </div>
             ) : null}
             {error ? <p className="text-sm text-danger">{error}</p> : null}
-            <Button type="submit" disabled={mutation.isLoading}>
-              {mutation.isLoading ? 'Submitting...' : 'Submit order'}
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? 'Submitting...' : 'Submit order'}
             </Button>
           </div>
         </form>

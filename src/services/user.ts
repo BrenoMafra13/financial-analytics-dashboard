@@ -7,8 +7,11 @@ export async function updateProfile(payload: {
   currency: 'USD' | 'CAD'
   locale: string
   avatarUrl?: string | null
+  budget?: number
 }) {
-  const { data } = await api.put<User>('/me', payload)
+  const { avatarUrl, ...rest } = payload
+  const body = { ...rest, ...(typeof avatarUrl === 'string' && avatarUrl ? { avatarUrl } : {}), ...(payload.budget !== undefined ? { budget: payload.budget } : {}) }
+  const { data } = await api.put<User>('/me', body)
   return data
 }
 

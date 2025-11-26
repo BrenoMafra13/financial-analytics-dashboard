@@ -2,13 +2,11 @@ import { DollarSign, LineChart, PiggyBank, TrendingUp } from 'lucide-react'
 import { KpiCard } from './KpiCard'
 import { Skeleton } from '@/components/ui/skeleton'
 import { useKpiSummary } from '@/features/dashboard/hooks/useKpiSummary'
-
-function formatCurrency(value: number, currency: string) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value)
-}
+import { useCurrency } from '@/hooks/useCurrency'
 
 export function KpiGrid() {
   const { data, isLoading, isError } = useKpiSummary()
+  const { format } = useCurrency()
 
   if (isLoading) {
     return (
@@ -28,19 +26,19 @@ export function KpiGrid() {
     <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
       <KpiCard
         title="Total balance"
-        value={formatCurrency(data.totalBalance, data.currency)}
+        value={format(data.totalBalance, data.currency as 'USD' | 'CAD')}
         helper="All accounts combined"
         icon={<DollarSign className="h-4 w-4" />}
       />
       <KpiCard
         title="Invested amount"
-        value={formatCurrency(data.investedAmount, data.currency)}
+        value={format(data.investedAmount, data.currency as 'USD' | 'CAD')}
         helper="Across brokerage"
         icon={<LineChart className="h-4 w-4" />}
       />
       <KpiCard
         title="Monthly expenses"
-        value={formatCurrency(data.monthlyExpenses, data.currency)}
+        value={format(data.monthlyExpenses, data.currency as 'USD' | 'CAD')}
         helper="Current period"
         icon={<PiggyBank className="h-4 w-4" />}
       />

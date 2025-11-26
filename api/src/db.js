@@ -25,7 +25,8 @@ function bootstrap() {
       currency TEXT NOT NULL,
       locale TEXT NOT NULL,
       tier TEXT NOT NULL,
-      avatarUrl TEXT
+      avatarUrl TEXT,
+      budget REAL DEFAULT 2000
     );
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY,
@@ -74,9 +75,10 @@ function bootstrap() {
       currency: 'USD',
       locale: 'en-US',
       tier: 'premium',
+      budget: 2000,
     }
     db.prepare(
-      'INSERT INTO users (id, email, passwordHash, name, currency, locale, tier) VALUES (@id, @email, @passwordHash, @name, @currency, @locale, @tier)'
+      'INSERT INTO users (id, email, passwordHash, name, currency, locale, tier, budget) VALUES (@id, @email, @passwordHash, @name, @currency, @locale, @tier, @budget)'
     ).run(demoUser)
 
     const accounts = [
@@ -118,6 +120,11 @@ function bootstrap() {
     const hasAvatar = db.prepare("PRAGMA table_info('users')").all().some((col) => col.name === 'avatarUrl')
     if (!hasAvatar) {
       db.prepare('ALTER TABLE users ADD COLUMN avatarUrl TEXT').run()
+    }
+    const hasBudget = db.prepare("PRAGMA table_info('users')").all().some((col) => col.name === 'budget')
+    if (!hasBudget) {
+      db.prepare('ALTER TABLE users ADD COLUMN budget REAL DEFAULT 2000').run()
+      db.prepare('UPDATE users SET budget = 2000 WHERE budget IS NULL').run()
     }
   } catch (err) {
     // ignore migration errors

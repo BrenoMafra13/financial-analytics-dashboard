@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input'
 import { Select } from '@/components/ui/select'
 import { createAccount } from '@/services/accounts'
+import type { AccountType } from '@/types'
 
 const accountTypes = [
   { value: 'CHECKING', label: 'Checking' },
@@ -35,7 +36,13 @@ export function NewAccountForm() {
     onError: () => setError('Unable to create account.'),
   })
 
-  const [form, setForm] = useState({
+  const [form, setForm] = useState<{
+    name: string
+    institution: string
+    type: AccountType
+    currency: 'USD' | 'CAD'
+    balance: string
+  }>({
     name: '',
     institution: '',
     type: 'CHECKING',
@@ -53,7 +60,7 @@ export function NewAccountForm() {
     mutation.mutate({
       name: form.name,
       institution: form.institution || undefined,
-      type: form.type as (typeof accountTypes)[number]['value'],
+      type: form.type,
       currency: form.currency,
       balance: Number(form.balance),
     })
@@ -83,7 +90,7 @@ export function NewAccountForm() {
           <div className="grid gap-3 sm:grid-cols-3">
             <Select
               value={form.type}
-              onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value }))}
+              onChange={(e) => setForm((prev) => ({ ...prev, type: e.target.value as AccountType }))}
               className="w-full"
             >
               {accountTypes.map((opt) => (
@@ -98,7 +105,7 @@ export function NewAccountForm() {
             </Select>
             <Select
               value={form.currency}
-              onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value }))}
+              onChange={(e) => setForm((prev) => ({ ...prev, currency: e.target.value as 'USD' | 'CAD' }))}
               className="w-full"
             >
               {currencyOptions.map((cur) => (
@@ -122,8 +129,8 @@ export function NewAccountForm() {
 
           {error ? <p className="text-sm text-danger">{error}</p> : null}
 
-          <Button type="submit" disabled={mutation.isLoading}>
-            {mutation.isLoading ? 'Saving...' : 'Add account'}
+          <Button type="submit" disabled={mutation.isPending}>
+            {mutation.isPending ? 'Saving...' : 'Add account'}
           </Button>
         </form>
       </CardContent>

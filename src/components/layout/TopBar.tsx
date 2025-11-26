@@ -1,4 +1,3 @@
-import { Bell } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Select } from '@/components/ui/select'
 import { ThemeToggle } from './ThemeToggle'
@@ -66,15 +65,6 @@ export function TopBar() {
           ))}
         </div>
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          className="border border-surface-200 text-surface-600 hover:bg-surface-100 dark:border-white/10 dark:bg-white/5 dark:text-white"
-          aria-label="Notifications"
-        >
-          <Bell className="h-4 w-4" />
-        </Button>
         <ThemeToggle />
         <UserMenu />
       </div>

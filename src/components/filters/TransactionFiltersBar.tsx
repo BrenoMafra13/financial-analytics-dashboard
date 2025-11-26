@@ -20,7 +20,7 @@ export function TransactionFiltersBar() {
   }, [localSearch, setSearch])
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-surface-100 bg-white/60 p-3 text-sm dark:border-white/10 dark:bg-white/5">
+    <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-surface-100 bg-white/80 p-3 text-sm dark:border-white/10 dark:bg-surface-800/80">
       <div className="relative w-full max-w-sm">
         <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-surface-400 dark:text-slate-400" />
         <Input

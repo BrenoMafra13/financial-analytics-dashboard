@@ -58,7 +58,6 @@ export function NewTransactionForm() {
     }
     setError(null)
     mutation.mutate({
-      id: '',
       accountId: form.accountId,
       categoryId: form.categoryId,
       description: form.description,
@@ -139,8 +138,8 @@ export function NewTransactionForm() {
             <Input value={currency} disabled />
             {error ? <p className="text-sm text-danger">{error}</p> : null}
             {success ? <p className="text-sm text-success">{success}</p> : null}
-            <Button type="submit" disabled={mutation.isLoading}>
-              {mutation.isLoading ? 'Saving...' : 'Add transaction'}
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? 'Saving...' : 'Add transaction'}
             </Button>
           </div>
         </form>

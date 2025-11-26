@@ -8,4 +8,5 @@ export interface User {
   locale: string
   currency: string
   tier: UserTier
+  budget?: number
 }

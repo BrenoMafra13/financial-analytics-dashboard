@@ -7,7 +7,7 @@ export const Card = forwardRef<HTMLDivElement, HTMLAttributes<HTMLDivElement>>(
     <div
       ref={ref}
       className={cn(
-        'rounded-3xl border border-surface-100 bg-white/80 p-6 text-left text-surface-900 shadow-card backdrop-blur dark:border-white/5 dark:bg-white/5 dark:text-white',
+        'rounded-3xl border border-surface-100 bg-white p-6 text-left text-surface-900 shadow-card dark:border-white/10 dark:bg-surface-800/80 dark:text-white',
         className,
       )}
       {...props}
@@ -32,7 +32,7 @@ CardTitle.displayName = 'CardTitle'
 
 export const CardDescription = forwardRef<HTMLParagraphElement, HTMLAttributes<HTMLParagraphElement>>(
   ({ className, ...props }, ref) => (
-    <p ref={ref} className={cn('text-sm text-surface-500 dark:text-slate-400', className)} {...props} />
+    <p ref={ref} className={cn('text-sm text-surface-500 dark:text-slate-200', className)} {...props} />
   ),
 )
 CardDescription.displayName = 'CardDescription'

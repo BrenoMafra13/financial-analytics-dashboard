@@ -8,10 +8,7 @@ import { useTransactions } from '@/features/dashboard/hooks/useTransactions'
 import { useQuery } from '@tanstack/react-query'
 import { fetchCategories } from '@/services/categories'
 import type { Transaction } from '@/types'
-
-function formatCurrency(value: number, currency: string) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value)
-}
+import { useCurrency } from '@/hooks/useCurrency'
 
 function formatDate(date: string) {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(date))
@@ -30,6 +27,7 @@ export function TransactionsTable() {
   const pageSize = 6
   const { data, isLoading, isError } = useTransactions(page, pageSize)
   const categoriesCache = useQuery({ queryKey: ['categories'], queryFn: fetchCategories })
+  const { format } = useCurrency()
 
   const rows = useMemo(() => data?.items ?? [], [data])
 
@@ -40,7 +38,7 @@ export function TransactionsTable() {
     <Card className="p-0">
       <CardHeader className="flex flex-row items-center justify-between px-6 py-4">
         <CardTitle className="text-lg">Recent transactions</CardTitle>
-        <p className="text-sm text-surface-500 dark:text-slate-400">
+        <p className="text-sm text-surface-600 dark:text-slate-200">
           Page {data.page} of {data.totalPages}
         </p>
       </CardHeader>
@@ -73,7 +71,7 @@ export function TransactionsTable() {
                       tx.amount >= 0 ? 'text-success' : 'text-danger'
                     }`}
                   >
-                    {formatCurrency(tx.amount, tx.currency)}
+                    {format(tx.amount, tx.currency as 'USD' | 'CAD')}
                   </td>
                 </tr>
               ))}

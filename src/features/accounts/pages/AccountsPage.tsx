@@ -6,6 +6,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useAccounts } from '../hooks/useAccounts'
 import type { Account } from '@/types'
 import { NewAccountForm } from '../components/NewAccountForm'
+import { useCurrency } from '@/hooks/useCurrency'
 
 const typeLabels: Record<Account['type'], string> = {
   CHECKING: 'Checking',
@@ -15,19 +16,16 @@ const typeLabels: Record<Account['type'], string> = {
   WALLET: 'Wallet',
 }
 
-function formatCurrency(value: number, currency: string) {
-  return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value)
-}
-
 export function AccountsPage() {
   const { data, isLoading, isError } = useAccounts()
+  const { format, convert, currency } = useCurrency()
 
   const totals = useMemo(() => {
     if (!data?.length) return null
-    const sum = data.reduce((acc, account) => acc + account.balance, 0)
+    const sum = data.reduce((acc, account) => acc + convert(account.balance, account.currency as 'USD' | 'CAD'), 0)
     const positive = data.filter((a) => a.balance >= 0).length
-    return { sum, currency: data[0].currency, positive }
-  }, [data])
+    return { sum, currency, positive }
+  }, [convert, currency, data])
 
   if (isLoading) {
     return (
@@ -46,13 +44,26 @@ export function AccountsPage() {
     return <p className="text-sm text-danger">Unable to load accounts.</p>
   }
 
+  const chartData = useMemo(
+    () =>
+      (data ?? []).map((account) => ({
+        ...account,
+        balance: convert(account.balance, account.currency as 'USD' | 'CAD'),
+        currency,
+      })),
+    [convert, currency, data],
+  )
+
   return (
     <section className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-2xl font-semibold text-surface-900 dark:text-white">Accounts</h2>
+      <div className="flex flex-wrap items-center gap-4">
+        <h2 className="text-3xl font-bold text-surface-900 dark:text-white">Accounts</h2>
         {totals ? (
-          <Badge variant={totals.sum >= 0 ? 'success' : 'danger'}>
-            Total: {formatCurrency(totals.sum, totals.currency)}
+          <Badge
+            variant={totals.sum >= 0 ? 'success' : 'danger'}
+            className="px-4 py-2 text-base font-semibold bg-white text-surface-900 shadow-sm dark:bg-surface-800 dark:text-white"
+          >
+            Total: <span className="font-bold">{format(totals.sum, totals.currency as 'USD' | 'CAD')}</span>
           </Badge>
         ) : null}
       </div>
@@ -64,19 +75,26 @@ export function AccountsPage() {
               <CardTitle className="text-lg">Balances by account</CardTitle>
             </CardHeader>
             <CardContent className="px-4 pb-6">
-              <ResponsiveContainer width="100%" height={280}>
-                <BarChart data={data}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.3)" />
-                  <XAxis dataKey="name" stroke="currentColor" opacity={0.6} />
-                  <YAxis
-                    stroke="currentColor"
-                    opacity={0.6}
-                    tickFormatter={(v) => `${v >= 0 ? '' : '-'}$${Math.abs(v / 1000).toFixed(0)}k`}
-                  />
-                  <Tooltip formatter={(v: number, _key, entry) => formatCurrency(v, (entry?.payload as Account).currency)} />
-                  <Bar dataKey="balance" fill="#06c087" radius={12} />
-                </BarChart>
-              </ResponsiveContainer>
+              <div className="overflow-visible">
+                <ResponsiveContainer width="100%" height={280}>
+                  <BarChart data={chartData} margin={{ left: 60, right: 20, bottom: 12 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.3)" />
+                    <XAxis dataKey="name" stroke="currentColor" opacity={0.6} />
+                    <YAxis
+                      stroke="currentColor"
+                      opacity={0.6}
+                      width={70}
+                      tickFormatter={(v) => format(v as number, currency)}
+                    />
+                    <Tooltip
+                      formatter={(v: number, _key, entry) =>
+                        format(v, ((entry?.payload as Account)?.currency as 'USD' | 'CAD') || currency)
+                      }
+                    />
+                    <Bar dataKey="balance" fill="#06c087" radius={12} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
             </CardContent>
           </Card>
           <NewAccountForm />
@@ -87,20 +105,20 @@ export function AccountsPage() {
             <Card key={account.id} className="p-4">
               <div className="flex items-start justify-between">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-surface-500 dark:text-slate-400">
+                  <p className="text-xs uppercase tracking-[0.3em] text-surface-600 dark:text-slate-200">
                     {typeLabels[account.type]}
                   </p>
                   <p className="text-lg font-semibold text-surface-900 dark:text-white">{account.name}</p>
-                  <p className="text-sm text-surface-500 dark:text-slate-400">{account.institution}</p>
+                  <p className="text-sm text-surface-600 dark:text-slate-200">{account.institution}</p>
                 </div>
                 <Badge variant={account.balance >= 0 ? 'success' : 'danger'}>
                   {account.balance >= 0 ? 'Asset' : 'Liability'}
                 </Badge>
               </div>
               <p className={`mt-3 text-2xl font-semibold ${account.balance >= 0 ? 'text-success' : 'text-danger'}`}>
-                {formatCurrency(account.balance, account.currency)}
+                {format(convert(account.balance, account.currency as 'USD' | 'CAD'), currency)}
               </p>
-              <p className="text-xs text-surface-500 dark:text-slate-400">Updated {account.lastUpdated}</p>
+              <p className="text-xs text-surface-600 dark:text-slate-300">Updated {account.lastUpdated}</p>
             </Card>
           ))}
         </div>
