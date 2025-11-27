@@ -26,7 +26,8 @@ function bootstrap() {
       locale TEXT NOT NULL,
       tier TEXT NOT NULL,
       avatarUrl TEXT,
-      budget REAL DEFAULT 2000
+      budget REAL DEFAULT 2000,
+      createdAt TEXT DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS accounts (
       id TEXT PRIMARY KEY,
@@ -37,6 +38,7 @@ function bootstrap() {
       currency TEXT NOT NULL,
       balance REAL NOT NULL,
       lastUpdated TEXT NOT NULL,
+      protected INTEGER DEFAULT 0,
       FOREIGN KEY(userId) REFERENCES users(id)
     );
     CREATE TABLE IF NOT EXISTS transactions (
@@ -76,16 +78,17 @@ function bootstrap() {
       locale: 'en-US',
       tier: 'premium',
       budget: 2000,
+      createdAt: new Date().toISOString(),
     }
     db.prepare(
-      'INSERT INTO users (id, email, passwordHash, name, currency, locale, tier, budget) VALUES (@id, @email, @passwordHash, @name, @currency, @locale, @tier, @budget)'
+      'INSERT INTO users (id, email, passwordHash, name, currency, locale, tier, budget, createdAt) VALUES (@id, @email, @passwordHash, @name, @currency, @locale, @tier, @budget, @createdAt)'
     ).run(demoUser)
 
     const accounts = [
-      { id: 'acc-1', userId: demoUser.id, name: 'Checking', institution: 'Breno Bank', type: 'CHECKING', currency: 'USD', balance: 8200, lastUpdated: '2025-01-01' },
-      { id: 'acc-2', userId: demoUser.id, name: 'High-Yield Savings', institution: 'Breno Bank', type: 'SAVINGS', currency: 'USD', balance: 18500, lastUpdated: '2025-01-01' },
-      { id: 'acc-3', userId: demoUser.id, name: 'Brokerage', institution: 'Breno Invest', type: 'BROKERAGE', currency: 'USD', balance: 40250, lastUpdated: '2025-01-01' },
-      { id: 'acc-4', userId: demoUser.id, name: 'Credit Card', institution: 'Breno Card', type: 'CREDIT_CARD', currency: 'USD', balance: -950, lastUpdated: '2025-01-01' },
+      { id: 'acc-1', userId: demoUser.id, name: 'Checking', institution: 'Breno Bank', type: 'CHECKING', currency: 'USD', balance: 8200, lastUpdated: '2025-01-01', protected: 1 },
+      { id: 'acc-2', userId: demoUser.id, name: 'High-Yield Savings', institution: 'Breno Bank', type: 'SAVINGS', currency: 'USD', balance: 18500, lastUpdated: '2025-01-01', protected: 0 },
+      { id: 'acc-3', userId: demoUser.id, name: 'Brokerage', institution: 'Breno Invest', type: 'BROKERAGE', currency: 'USD', balance: 40250, lastUpdated: '2025-01-01', protected: 0 },
+      { id: 'acc-4', userId: demoUser.id, name: 'Credit Card', institution: 'Breno Card', type: 'CREDIT_CARD', currency: 'USD', balance: -950, lastUpdated: '2025-01-01', protected: 0 },
     ]
 
     const txs = [
@@ -104,7 +107,7 @@ function bootstrap() {
       { id: 'inv-3', userId: demoUser.id, symbol: 'BTC', name: 'Bitcoin', type: 'CRYPTO', quantity: 0.8, currentPrice: 42000, currency: 'USD' },
     ]
 
-    const insertAccount = db.prepare('INSERT INTO accounts (id, userId, name, institution, type, currency, balance, lastUpdated) VALUES (@id, @userId, @name, @institution, @type, @currency, @balance, @lastUpdated)')
+    const insertAccount = db.prepare('INSERT INTO accounts (id, userId, name, institution, type, currency, balance, lastUpdated, protected) VALUES (@id, @userId, @name, @institution, @type, @currency, @balance, @lastUpdated, @protected)')
     const insertTx = db.prepare('INSERT INTO transactions (id, userId, accountId, categoryId, description, type, amount, currency, date) VALUES (@id, @userId, @accountId, @categoryId, @description, @type, @amount, @currency, @date)')
     const insertInvestment = db.prepare('INSERT INTO investments (id, userId, symbol, name, type, quantity, currentPrice, currency) VALUES (@id, @userId, @symbol, @name, @type, @quantity, @currentPrice, @currency)')
 
@@ -126,6 +129,16 @@ function bootstrap() {
       db.prepare('ALTER TABLE users ADD COLUMN budget REAL DEFAULT 2000').run()
       db.prepare('UPDATE users SET budget = 2000 WHERE budget IS NULL').run()
     }
+    const hasCreatedAt = db.prepare("PRAGMA table_info('users')").all().some((col) => col.name === 'createdAt')
+    if (!hasCreatedAt) {
+      db.prepare("ALTER TABLE users ADD COLUMN createdAt TEXT DEFAULT (datetime('now'))").run()
+      db.prepare("UPDATE users SET createdAt = datetime('now') WHERE createdAt IS NULL").run()
+    }
+    const hasProtected = db.prepare("PRAGMA table_info('accounts')").all().some((col) => col.name === 'protected')
+    if (!hasProtected) {
+      db.prepare('ALTER TABLE accounts ADD COLUMN protected INTEGER DEFAULT 0').run()
+    }
+    db.prepare("UPDATE accounts SET protected = 1 WHERE protected IS NULL AND name = 'Checking'").run()
   } catch (err) {
     // ignore migration errors
   }

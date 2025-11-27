@@ -20,6 +20,76 @@ function signToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' })
 }
 
+function createGuestSnapshot() {
+  const id = nanoid()
+  const today = new Date().toISOString().slice(0, 10)
+  const user = {
+    id,
+    email: `guest+${id}@guest.local`,
+    passwordHash: bcrypt.hashSync(`guest-${id}`, 10),
+    name: 'Guest',
+    currency: 'USD',
+    locale: 'en-US',
+    tier: 'guest',
+    budget: 2000,
+    avatarUrl: null,
+    createdAt: new Date().toISOString(),
+  }
+
+  db.prepare(
+    'INSERT INTO users (id, email, passwordHash, name, currency, locale, tier, budget, avatarUrl, createdAt) VALUES (@id, @email, @passwordHash, @name, @currency, @locale, @tier, @budget, @avatarUrl, @createdAt)'
+  ).run(user)
+
+  const accounts = [
+    { id: nanoid(), userId: id, name: 'Checking', institution: 'Guest Bank', type: 'CHECKING', currency: 'USD', balance: 8200, lastUpdated: today, protected: 1 },
+    { id: nanoid(), userId: id, name: 'High-Yield Savings', institution: 'Guest Bank', type: 'SAVINGS', currency: 'USD', balance: 18500, lastUpdated: today, protected: 0 },
+    { id: nanoid(), userId: id, name: 'Brokerage', institution: 'Guest Invest', type: 'BROKERAGE', currency: 'USD', balance: 40250, lastUpdated: today, protected: 0 },
+    { id: nanoid(), userId: id, name: 'Credit Card', institution: 'Guest Card', type: 'CREDIT_CARD', currency: 'USD', balance: -950, lastUpdated: today, protected: 0 },
+  ]
+
+  const accountIds = {
+    checking: accounts[0].id,
+    savings: accounts[1].id,
+    brokerage: accounts[2].id,
+    credit: accounts[3].id,
+  }
+
+  const transactions = [
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-1', description: 'Salary - Guest Corp', type: 'INCOME', amount: 6200, currency: 'USD', date: today },
+    { id: nanoid(), userId: id, accountId: accountIds.brokerage, categoryId: 'cat-2', description: 'ETF contribution', type: 'INCOME', amount: 850, currency: 'USD', date: today },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-3', description: 'Rent', type: 'EXPENSE', amount: -1800, currency: 'USD', date: today },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-4', description: 'Groceries', type: 'EXPENSE', amount: -240, currency: 'USD', date: today },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-5', description: 'Ride share', type: 'EXPENSE', amount: -32, currency: 'USD', date: today },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-6', description: 'Streaming services', type: 'EXPENSE', amount: -28, currency: 'USD', date: today },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-7', description: 'Electricity bill', type: 'EXPENSE', amount: -120, currency: 'USD', date: today },
+  ]
+
+  const investments = [
+    { id: nanoid(), userId: id, symbol: 'AAPL', name: 'Apple Inc', type: 'STOCK', quantity: 40, currentPrice: 190, currency: 'USD' },
+    { id: nanoid(), userId: id, symbol: 'VTI', name: 'Vanguard Total Market', type: 'ETF', quantity: 25, currentPrice: 245, currency: 'USD' },
+    { id: nanoid(), userId: id, symbol: 'BTC', name: 'Bitcoin', type: 'CRYPTO', quantity: 0.8, currentPrice: 42000, currency: 'USD' },
+  ]
+
+  const insertAccount = db.prepare(
+    'INSERT INTO accounts (id, userId, name, institution, type, currency, balance, lastUpdated, protected) VALUES (@id, @userId, @name, @institution, @type, @currency, @balance, @lastUpdated, @protected)'
+  )
+  const insertTx = db.prepare(
+    'INSERT INTO transactions (id, userId, accountId, categoryId, description, type, amount, currency, date) VALUES (@id, @userId, @accountId, @categoryId, @description, @type, @amount, @currency, @date)'
+  )
+  const insertInv = db.prepare(
+    'INSERT INTO investments (id, userId, symbol, name, type, quantity, currentPrice, currency) VALUES (@id, @userId, @symbol, @name, @type, @quantity, @currentPrice, @currency)'
+  )
+
+  const tx = db.transaction(() => {
+    accounts.forEach((a) => insertAccount.run(a))
+    transactions.forEach((t) => insertTx.run(t))
+    investments.forEach((inv) => insertInv.run(inv))
+  })
+  tx()
+
+  return user
+}
+
 function authMiddleware(req, res, next) {
   const header = req.headers.authorization
   if (!header || !header.startsWith('Bearer ')) {
@@ -58,10 +128,13 @@ app.post('/auth/login', (req, res) => {
 })
 
 app.post('/auth/guest', (_req, res) => {
-  const user = db.prepare('SELECT * FROM users LIMIT 1').get()
-  const guest = { ...user, name: 'Guest', email: 'guest@gmail.com' }
+  const guest = createGuestSnapshot()
   const token = signToken(guest.id)
-  res.json({ token, user: sanitizeUser(guest) })
+  const safe = sanitizeUser(guest)
+  res.json({
+    token,
+    user: { ...safe, name: 'Guest', email: 'guest@gmail.com' },
+  })
 })
 
 app.post('/auth/register', (req, res) => {
@@ -87,9 +160,10 @@ app.post('/auth/register', (req, res) => {
     locale: parsed.data.locale,
     tier: 'standard',
     budget: 2000,
+    createdAt: new Date().toISOString(),
   }
   db.prepare(
-    'INSERT INTO users (id, email, passwordHash, name, currency, locale, tier, budget) VALUES (@id, @email, @passwordHash, @name, @currency, @locale, @tier, @budget)'
+    'INSERT INTO users (id, email, passwordHash, name, currency, locale, tier, budget, createdAt) VALUES (@id, @email, @passwordHash, @name, @currency, @locale, @tier, @budget, @createdAt)'
   ).run(user)
 
   const account = {
@@ -101,9 +175,10 @@ app.post('/auth/register', (req, res) => {
     currency: user.currency,
     balance: 0,
     lastUpdated: new Date().toISOString().slice(0, 10),
+    protected: 1,
   }
   db.prepare(
-    'INSERT INTO accounts (id, userId, name, institution, type, currency, balance, lastUpdated) VALUES (@id, @userId, @name, @institution, @type, @currency, @balance, @lastUpdated)'
+    'INSERT INTO accounts (id, userId, name, institution, type, currency, balance, lastUpdated, protected) VALUES (@id, @userId, @name, @institution, @type, @currency, @balance, @lastUpdated, @protected)'
   ).run(account)
 
   const token = signToken(user.id)
@@ -130,9 +205,15 @@ app.put('/me', (req, res) => {
   const parsed = schema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ message: 'Invalid payload' })
 
+  const current = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId)
+  if (!current) return res.status(404).json({ message: 'User not found' })
+
+  const emailToSave = current.tier === 'guest' ? current.email : parsed.data.email
+  const nameToSave = current.tier === 'guest' ? 'Guest' : parsed.data.name
+
   db.prepare('UPDATE users SET name = ?, email = ?, currency = ?, locale = ?, avatarUrl = ?, budget = COALESCE(?, budget) WHERE id = ?').run(
-    parsed.data.name,
-    parsed.data.email,
+    nameToSave,
+    emailToSave,
     parsed.data.currency,
     parsed.data.locale,
     parsed.data.avatarUrl ?? null,
@@ -160,11 +241,25 @@ app.post('/accounts', (req, res) => {
   const parsed = schema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ message: 'Invalid account payload' })
 
-  const account = { id: nanoid(), userId: req.userId, lastUpdated: new Date().toISOString().slice(0, 10), ...parsed.data }
+  const account = { id: nanoid(), userId: req.userId, lastUpdated: new Date().toISOString().slice(0, 10), protected: 0, ...parsed.data }
   db.prepare(
-    'INSERT INTO accounts (id, userId, name, institution, type, currency, balance, lastUpdated) VALUES (@id, @userId, @name, @institution, @type, @currency, @balance, @lastUpdated)'
+    'INSERT INTO accounts (id, userId, name, institution, type, currency, balance, lastUpdated, protected) VALUES (@id, @userId, @name, @institution, @type, @currency, @balance, @lastUpdated, @protected)'
   ).run(account)
   res.status(201).json(account)
+})
+
+app.delete('/accounts/:id', (req, res) => {
+  const account = db.prepare('SELECT * FROM accounts WHERE id = ? AND userId = ?').get(req.params.id, req.userId)
+  if (!account) return res.status(404).json({ message: 'Account not found' })
+  if (account.protected) return res.status(400).json({ message: 'Default account cannot be deleted' })
+  if (Math.abs(Number(account.balance)) > 0) {
+    return res.status(400).json({ message: 'Account with non-zero balance cannot be deleted' })
+  }
+
+  db.prepare('DELETE FROM transactions WHERE accountId = ? AND userId = ?').run(account.id, req.userId)
+  db.prepare('DELETE FROM accounts WHERE id = ? AND userId = ?').run(account.id, req.userId)
+
+  res.status(204).end()
 })
 
 app.get('/transactions', (req, res) => {
@@ -547,12 +642,44 @@ app.get('/net-worth', async (req, res) => {
 
 function sanitizeUser(user) {
   const { passwordHash, ...rest } = user
+  if (rest.tier === 'guest') {
+    return { ...rest, name: 'Guest', email: 'guest@gmail.com' }
+  }
   return rest
+}
+
+function purgeOldGuests() {
+  try {
+    const cutoff = Date.now() - 24 * 60 * 60 * 1000
+    const guests = db.prepare("SELECT id, createdAt FROM users WHERE tier = 'guest'").all()
+    const shouldDelete = guests.filter((g) => {
+      const ts = Date.parse(g.createdAt)
+      return Number.isFinite(ts) && ts < cutoff
+    })
+    const deleteAccount = db.prepare('DELETE FROM accounts WHERE userId = ?')
+    const deleteTx = db.prepare('DELETE FROM transactions WHERE userId = ?')
+    const deleteInv = db.prepare('DELETE FROM investments WHERE userId = ?')
+    const deleteUser = db.prepare('DELETE FROM users WHERE id = ?')
+    const tx = db.transaction((rows) => {
+      rows.forEach((g) => {
+        deleteTx.run(g.id)
+        deleteAccount.run(g.id)
+        deleteInv.run(g.id)
+        deleteUser.run(g.id)
+      })
+    })
+    tx(shouldDelete)
+  } catch (err) {
+    console.error('Guest purge error', err)
+  }
 }
 
 app.listen(PORT, () => {
   console.log(`API listening on http://localhost:${PORT}`)
 })
+
+purgeOldGuests()
+setInterval(purgeOldGuests, 24 * 60 * 60 * 1000)
 
 app.post('/investments', (req, res) => {
   const schema = z.object({

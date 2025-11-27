@@ -10,3 +10,7 @@ export async function createAccount(payload: Omit<Account, 'id' | 'lastUpdated' 
   const { data } = await api.post<Account>('/accounts', payload)
   return data
 }
+
+export async function deleteAccount(id: string) {
+  await api.delete(`/accounts/${id}`)
+}

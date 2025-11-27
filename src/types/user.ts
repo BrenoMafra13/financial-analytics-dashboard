@@ -1,4 +1,4 @@
-export type UserTier = 'standard' | 'premium' | 'private'
+export type UserTier = 'standard' | 'premium' | 'private' | 'guest'
 
 export interface User {
   id: string

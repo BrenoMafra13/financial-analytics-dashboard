@@ -13,10 +13,12 @@ import {
 import { Input } from '@/components/ui/input'
 import { guestLogin, login } from '@/services'
 import { useUserStore } from '@/store/user'
+import { useFilterStore } from '@/store/filters'
 
 export function LoginPage() {
   const navigate = useNavigate()
   const setAuth = useUserStore((state) => state.setAuth)
+  const resetFilters = useFilterStore((state) => state.reset)
   const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
@@ -30,6 +32,7 @@ export function LoginPage() {
     try {
       const { user, token } = await login({ email, password })
       setAuth(user, token)
+      resetFilters()
       navigate('/dashboard')
     } catch (err) {
       setError('Invalid email or password. Please try again.')
@@ -42,6 +45,7 @@ export function LoginPage() {
     setError(null)
     const { user, token } = await guestLogin()
     setAuth(user, token)
+    resetFilters()
     navigate('/dashboard')
   }
 

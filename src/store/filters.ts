@@ -18,7 +18,7 @@ const computeRange = (preset: PeriodPreset): DateRange => {
   return { preset, from: start, to: end }
 }
 
-const defaultRange: DateRange = computeRange('30d')
+const getDefaultRange = (): DateRange => computeRange('30d')
 
 interface FilterState {
   transactionFilters: TransactionFilters
@@ -27,13 +27,14 @@ interface FilterState {
   setType: (type: TransactionFilterType) => void
   setCategory: (categoryId?: string) => void
   setSearch: (search?: string) => void
+  reset: () => void
 }
 
 export const useFilterStore = create<FilterState>()(
   persist(
     (set) => ({
       transactionFilters: {
-        period: defaultRange,
+        period: getDefaultRange(),
         type: 'ALL',
       },
       setPeriod: (range) => set((state) => ({ transactionFilters: { ...state.transactionFilters, period: range } })),
@@ -43,6 +44,15 @@ export const useFilterStore = create<FilterState>()(
       setCategory: (categoryId) =>
         set((state) => ({ transactionFilters: { ...state.transactionFilters, categoryId } })),
       setSearch: (search) => set((state) => ({ transactionFilters: { ...state.transactionFilters, search } })),
+      reset: () =>
+        set(() => ({
+          transactionFilters: {
+            period: getDefaultRange(),
+            type: 'ALL',
+            categoryId: undefined,
+            search: undefined,
+          },
+        })),
     }),
     {
       name: 'financial-analytics-filters',

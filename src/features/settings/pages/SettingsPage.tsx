@@ -35,6 +35,7 @@ export function SettingsPage() {
   const [budget, setBudget] = useState<number>(user?.budget ?? 2000)
   const [saving, setSaving] = useState(false)
   const locale = localeByCurrency[currency]
+  const isGuest = user?.tier === 'guest'
 
   const handleAvatar = (e: ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -92,13 +93,19 @@ export function SettingsPage() {
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <p className="text-sm font-medium text-surface-900 dark:text-white">Name</p>
-              <Input value={name} onChange={(e) => setName(e.target.value)} />
+              <Input value={name} onChange={(e) => setName(e.target.value)} disabled={isGuest} />
             </div>
             <div className="space-y-2">
               <p className="text-sm font-medium text-surface-900 dark:text-white">Email</p>
-              <Input value={email} onChange={(e) => setEmail(e.target.value)} />
+              <Input value={email} onChange={(e) => setEmail(e.target.value)} disabled={isGuest} />
             </div>
           </div>
+
+          {isGuest ? (
+            <p className="text-sm font-semibold text-amber-400">
+              Guest accounts cannot change name/email. You can update currency, budget, avatar, and theme. Full editing is available for signed-up users.
+            </p>
+          ) : null}
 
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">

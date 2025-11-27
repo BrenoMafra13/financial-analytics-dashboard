@@ -8,4 +8,5 @@ export interface Account {
   currency: string
   balance: number
   lastUpdated: string
+  protected?: boolean
 }

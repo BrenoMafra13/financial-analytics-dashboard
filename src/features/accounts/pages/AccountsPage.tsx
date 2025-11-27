@@ -7,6 +7,9 @@ import { useAccounts } from '../hooks/useAccounts'
 import type { Account } from '@/types'
 import { NewAccountForm } from '../components/NewAccountForm'
 import { useCurrency } from '@/hooks/useCurrency'
+import { Trash2 } from 'lucide-react'
+import { deleteAccount } from '@/services/accounts'
+import { useQueryClient } from '@tanstack/react-query'
 
 const typeLabels: Record<Account['type'], string> = {
   CHECKING: 'Checking',
@@ -19,6 +22,7 @@ const typeLabels: Record<Account['type'], string> = {
 export function AccountsPage() {
   const { data, isLoading, isError } = useAccounts()
   const { format, convert, currency } = useCurrency()
+  const queryClient = useQueryClient()
 
   const totals = useMemo(() => {
     if (!data?.length) return null
@@ -111,9 +115,32 @@ export function AccountsPage() {
                   <p className="text-lg font-semibold text-surface-900 dark:text-white">{account.name}</p>
                   <p className="text-sm text-surface-600 dark:text-slate-200">{account.institution}</p>
                 </div>
-                <Badge variant={account.balance >= 0 ? 'success' : 'danger'}>
-                  {account.balance >= 0 ? 'Asset' : 'Liability'}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={account.balance >= 0 ? 'success' : 'danger'}>
+                    {account.balance >= 0 ? 'Asset' : 'Liability'}
+                  </Badge>
+                  {!account.protected ? (
+                    <button
+                      type="button"
+                      className="rounded-full bg-red-600 p-2 text-white shadow-sm transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                      onClick={async () => {
+                        const confirmed = window.confirm(`Delete account "${account.name}"? This will remove its transactions.`)
+                        if (!confirmed) return
+                        try {
+                          await deleteAccount(account.id)
+                          void queryClient.invalidateQueries({ queryKey: ['accounts'] })
+                          void queryClient.invalidateQueries({ queryKey: ['transactions'] })
+                          void queryClient.invalidateQueries({ queryKey: ['kpi-summary'] })
+                        } catch (err) {
+                          alert('Unable to delete account. Make sure the balance is zero.')
+                        }
+                      }}
+                      aria-label={`Delete ${account.name}`}
+                    >
+                      <Trash2 className="h-5 w-5" />
+                    </button>
+                  ) : null}
+                </div>
               </div>
               <p className={`mt-3 text-2xl font-semibold ${account.balance >= 0 ? 'text-success' : 'text-danger'}`}>
                 {format(convert(account.balance, account.currency as 'USD' | 'CAD'), currency)}
