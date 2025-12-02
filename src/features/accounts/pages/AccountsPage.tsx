@@ -95,7 +95,7 @@ export function AccountsPage() {
                         format(v, ((entry?.payload as Account)?.currency as 'USD' | 'CAD') || currency)
                       }
                     />
-                    <Bar dataKey="balance" fill="#06c087" radius={12} />
+                    <Bar dataKey="balance" fill="#C1FF72" radius={12} />
                   </BarChart>
                 </ResponsiveContainer>
               </div>

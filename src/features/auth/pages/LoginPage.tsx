@@ -50,9 +50,12 @@ export function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-surface-900 via-surface-950 to-black px-4 py-10">
-      <div className="w-full max-w-6xl space-y-8 mx-auto">
-        <Card className="w-full max-w-2xl mx-auto border-white/10 bg-surface-950/80 backdrop-blur-lg shadow-2xl">
+    <div
+      className="flex min-h-screen items-center justify-center bg-cover bg-center bg-no-repeat px-4 py-10"
+      style={{ backgroundImage: 'url(/background.svg)' }}
+    >
+      <div className="w-full max-w-5xl space-y-8 mx-auto">
+        <Card className="w-full max-w-xl mx-auto border-white/10 bg-surface-950/80 backdrop-blur-lg shadow-2xl">
           <form onSubmit={handleSubmit} className="space-y-6">
             <CardHeader className="space-y-2">
               <p className="text-2xl font-bold uppercase tracking-[0.4em] text-brand-300">Breno Finance</p>

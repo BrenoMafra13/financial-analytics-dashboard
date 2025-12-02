@@ -73,8 +73,8 @@ export function NetWorthChart() {
             <AreaChart data={chartData} margin={{ left: 60, right: 20, top: 10, bottom: 12 }}>
             <defs>
               <linearGradient id="networth" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#06c087" stopOpacity={0.7} />
-                <stop offset="95%" stopColor="#06c087" stopOpacity={0} />
+                <stop offset="5%" stopColor="#C1FF72" stopOpacity={0.7} />
+                <stop offset="95%" stopColor="#C1FF72" stopOpacity={0} />
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.08)" />
@@ -89,7 +89,7 @@ export function NetWorthChart() {
             <Area
               type="monotone"
               dataKey="total"
-              stroke="#06c087"
+              stroke="#C1FF72"
               strokeWidth={2}
               fillOpacity={1}
               fill="url(#networth)"

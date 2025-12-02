@@ -1,16 +1,16 @@
 import defaultTheme from 'tailwindcss/defaultTheme'
 
 const brand = {
-  50: '#ecfdf7',
-  100: '#cdfae9',
-  200: '#9af5d3',
-  300: '#5eeec0',
-  400: '#23dfa3',
-  500: '#06c087',
-  600: '#039b6f',
-  700: '#047857',
-  800: '#065f47',
-  900: '#064739',
+  50: '#c1ff72',
+  100: '#c1ff72',
+  200: '#c1ff72',
+  300: '#c1ff72',
+  400: '#c1ff72',
+  500: '#c1ff72',
+  600: '#c1ff72',
+  700: '#c1ff72',
+  800: '#c1ff72',
+  900: '#c1ff72',
 }
 
 const accent = {
@@ -41,7 +41,7 @@ const surface = {
 }
 
 const status = {
-  success: '#22c55e',
+  success: '#c1ff72',
   warning: '#facc15',
   danger: '#fb7185',
   info: '#38bdf8',
@@ -86,10 +86,10 @@ export default {
       },
       boxShadow: {
         card: '0 30px 60px rgba(2, 6, 23, 0.45)',
-        glow: '0 25px 60px rgba(6, 192, 135, 0.35)',
+        glow: '0 25px 60px rgba(193, 255, 114, 0.35)',
       },
       backgroundImage: {
-        'gradient-brand': 'linear-gradient(120deg, #06c087 0%, #38bdf8 100%)',
+        'gradient-brand': 'linear-gradient(120deg, #c1ff72 0%, #c1ff72 100%)',
       },
       keyframes: {
         shimmer: {

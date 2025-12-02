@@ -97,7 +97,7 @@ export function ExpensesPage() {
                     <div className="mt-2 h-2.5 rounded-full bg-surface-100 dark:bg-white/10">
                       <div
                         className="h-full rounded-full"
-                        style={{ width: '100%', backgroundColor: item.color ?? '#06c087' }}
+                        style={{ width: '100%', backgroundColor: item.color ?? '#C1FF72' }}
                       />
                     </div>
                   </div>
