@@ -14,6 +14,7 @@ import { Input } from '@/components/ui/input'
 import { guestLogin, login } from '@/services'
 import { useUserStore } from '@/store/user'
 import { useFilterStore } from '@/store/filters'
+import { FloatingVideo } from '@/components/FloatingVideo'
 
 export function LoginPage() {
   const navigate = useNavigate()
@@ -50,20 +51,22 @@ export function LoginPage() {
   }
 
   return (
-    <div
-      className="flex min-h-screen items-center justify-center bg-cover bg-center bg-no-repeat px-4 py-10"
-      style={{ backgroundImage: 'url(/background.svg)' }}
-    >
-      <div className="w-full max-w-5xl space-y-8 mx-auto">
+    <>
+      <FloatingVideo videoId="U5P4nF6hltQ" />
+      <div
+        className="flex min-h-screen items-center justify-center bg-cover bg-center bg-no-repeat px-4 py-5"
+        style={{ backgroundImage: 'url(/background.svg)' }}
+      >
+        <div className="w-full max-w-5xl space-y-4 mx-auto">
         <Card className="w-full max-w-xl mx-auto border-white/10 bg-surface-950/80 backdrop-blur-lg shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-6">
-            <CardHeader className="space-y-2">
+          <form onSubmit={handleSubmit} className="space-y-3">
+            <CardHeader className="space-y-1">
               <p className="text-2xl font-bold uppercase tracking-[0.4em] text-brand-300">Breno Finance</p>
               <CardTitle className="text-3xl text-white">Access your analytics HQ</CardTitle>
               <CardDescription className="text-lg text-surface-200">Sign in to access your analytics.</CardDescription>
             </CardHeader>
 
-            <CardContent className="space-y-4">
+            <CardContent className="space-y-2">
               <label htmlFor="email" className="space-y-2 text-lg font-medium text-slate-200">
                 Email
                 <Input id="email" name="email" type="email" placeholder="Type email" required className="h-12 text-lg" />
@@ -81,15 +84,15 @@ export function LoginPage() {
             </CardContent>
 
             <CardFooter className="px-6 pb-6 flex justify-center">
-              <div className="grid w-full max-w-xl gap-3">
-                <Button type="submit" className="h-14 w-full text-xl" disabled={loading}>
+              <div className="grid w-full max-w-xl gap-2">
+                <Button type="submit" className="h-12 w-full text-lg" disabled={loading}>
                   {loading ? 'Signing in...' : 'Access dashboard'}
                 </Button>
-                <div className="grid grid-cols-2 gap-3">
+                <div className="grid grid-cols-2 gap-2">
                   <Button
                     type="button"
                     variant="secondary"
-                    className="h-14 w-full text-xl"
+                    className="h-12 w-full text-lg"
                     onClick={() => navigate('/signup')}
                   >
                     Create an account
@@ -97,7 +100,7 @@ export function LoginPage() {
                   <Button
                     type="button"
                     variant="secondary"
-                    className="h-14 w-full text-xl !bg-amber-500 !text-black hover:!bg-amber-400 !border-transparent dark:!bg-amber-400 dark:!text-black"
+                    className="h-12 w-full text-lg !bg-amber-500 !text-black hover:!bg-amber-400 !border-transparent dark:!bg-amber-400 dark:!text-black"
                     onClick={handleGuest}
                   >
                     Continue as guest
@@ -109,7 +112,7 @@ export function LoginPage() {
         </Card>
 
         <Card className="w-full border-white/10 bg-surface-950/70 backdrop-blur shadow-lg max-w-5xl mx-auto">
-          <div className="space-y-4 p-6 text-lg text-surface-200">
+          <div className="space-y-2 p-3 text-lg text-surface-200">
             <p className="text-sm font-semibold uppercase tracking-[0.3em] text-brand-300">About the creator</p>
             <p className="text-2xl font-bold text-white">Breno Lopes Mafra</p>
             <p>
@@ -148,6 +151,7 @@ export function LoginPage() {
           </div>
         </Card>
       </div>
-    </div>
+      </div>
+    </>
   )
 }
