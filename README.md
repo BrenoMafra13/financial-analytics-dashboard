@@ -5,6 +5,9 @@
 ### Project Description
 Full-stack finance dashboard with auth (login/register/guest), account/transaction tracking, KPIs, charts, and settings. Frontend (React/Vite) calls a Node/Express API backed by SQLite; guest users get seeded data and are auto-purged after 24h.
 
+## Visit the application:
+https://financial-analytics-dashboard-neon.vercel.app/
+
 ### Demo video
 <p align="center">
   <a href="https://youtu.be/U5P4nF6hltQ" target="_blank">
