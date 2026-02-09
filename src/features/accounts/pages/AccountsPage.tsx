@@ -30,15 +30,27 @@ export function AccountsPage() {
     return Number.isFinite(num) ? num : 0
   }
 
+  const accounts = data ?? []
+
   const totals = useMemo(() => {
-    if (!data?.length) return null
-    const sum = data.reduce(
+    if (!accounts.length) return null
+    const sum = accounts.reduce(
       (acc, account) => acc + safeNumber(convert(safeNumber(account.balance), account.currency as 'USD' | 'CAD')),
       0,
     )
-    const positive = data.filter((a) => a.balance >= 0).length
+    const positive = accounts.filter((a) => a.balance >= 0).length
     return { sum, currency, positive }
-  }, [convert, currency, data])
+  }, [accounts, convert, currency])
+
+  const chartData = useMemo(
+    () =>
+      accounts.map((account) => ({
+        ...account,
+        balance: safeNumber(convert(safeNumber(account.balance), account.currency as 'USD' | 'CAD')),
+        currency,
+      })),
+    [accounts, convert, currency],
+  )
 
   if (isError) {
     return <p className="text-sm text-danger">Unable to load accounts.</p>
@@ -56,16 +68,6 @@ export function AccountsPage() {
       </div>
     )
   }
-
-  const chartData = useMemo(
-    () =>
-      (data ?? []).map((account) => ({
-        ...account,
-        balance: safeNumber(convert(safeNumber(account.balance), account.currency as 'USD' | 'CAD')),
-        currency,
-      })),
-    [convert, currency, data],
-  )
 
   return (
     <section className="space-y-4">
