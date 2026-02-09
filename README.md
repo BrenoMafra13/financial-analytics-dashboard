@@ -31,8 +31,24 @@ https://financial-analytics-dashboard-neon.vercel.app/
 - Frontend renders KPIs, charts, and tables; cron job deletes guest users older than 24h.
 - Arrows/requests: HTTP with Bearer token; data rows to/from DB; business logic runs in the API.
 
-### Quick start (local)
-1) Install deps: `npm install`
-2) Run API (inside `/api` if applicable): `npm install && npm run start` (ensure `PORT` matches `VITE_API_URL`)
-3) Run frontend: set `.env` `VITE_API_URL=http://localhost:4000` (or your Railway URL), then `npm run dev`
-4) Open the dev URL (usually http://localhost:5173), login/register, or use Guest.
+### Run locally (frontend + API)
+1) Install deps:
+   - Root: `npm install`
+   - API: `cd api && npm install`
+2) Frontend (root):
+   - Ensure `./.env` has `VITE_API_URL=http://localhost:4000`
+   - Run: `npm run dev`
+3) API (in `/api`):
+   - Run: `npm run dev`
+4) Open http://localhost:5173, login/register, or use Guest.
+
+### Run using the Railway API (frontend local, backend remoto)
+1) Ensure `./.env.production` has `VITE_API_URL=https://nodejs-production-796d.up.railway.app`
+2) Frontend (root):
+   - Run: `npm run dev -- --mode production`
+3) Open http://localhost:5173 and use the app (requests go to Railway).
+
+### Build/preview as production
+1) Frontend (root):
+   - Run: `npm run build`
+   - Preview: `npm run preview` (uses `.env.production`)

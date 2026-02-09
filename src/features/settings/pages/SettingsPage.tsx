@@ -49,6 +49,7 @@ export function SettingsPage() {
 
   const handleSave = async () => {
     if (!user) return
+    if (saving) return
     setSaving(true)
     try {
       const updated = await updateProfile({ name, email, currency, locale, avatarUrl: avatar, budget })
@@ -190,7 +191,7 @@ export function SettingsPage() {
           </p>
           <div className="flex flex-wrap items-center gap-4 text-xl font-semibold">
             <a
-              className="flex items-center gap-2 text-brand-600 hover:text-brand-500 underline dark:text-brand-300"
+              className="flex items-center gap-2 text-emerald-700 hover:text-emerald-600 underline dark:text-brand-300"
               href="https://www.linkedin.com/in/breno-lopes-mafra/"
               target="_blank"
               rel="noreferrer"
@@ -199,7 +200,7 @@ export function SettingsPage() {
               LinkedIn
             </a>
             <a
-              className="flex items-center gap-2 text-brand-600 hover:text-brand-500 underline dark:text-brand-300"
+              className="flex items-center gap-2 text-emerald-700 hover:text-emerald-600 underline dark:text-brand-300"
               href="https://github.com/BrenoMafra13"
               target="_blank"
               rel="noreferrer"
@@ -208,7 +209,7 @@ export function SettingsPage() {
               GitHub
             </a>
             <a
-              className="flex items-center gap-2 text-brand-600 hover:text-brand-500 underline dark:text-brand-300"
+              className="flex items-center gap-2 text-emerald-700 hover:text-emerald-600 underline dark:text-brand-300"
               href="https://www.youtube.com/@brenolopesmafra4519"
               target="_blank"
               rel="noreferrer"

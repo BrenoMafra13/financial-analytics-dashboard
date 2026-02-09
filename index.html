@@ -5,6 +5,17 @@
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>financial-analytics-dashboard</title>
+    <script>
+      (() => {
+        try {
+          const stored = localStorage.getItem('financial-analytics-theme')
+          const theme = stored ? JSON.parse(stored)?.state?.theme : 'dark'
+          document.documentElement.classList.add(theme === 'light' ? 'light' : 'dark')
+        } catch {
+          document.documentElement.classList.add('dark')
+        }
+      })()
+    </script>
   </head>
   <body>
     <div id="root"></div>

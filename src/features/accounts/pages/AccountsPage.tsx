@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
@@ -23,15 +23,28 @@ export function AccountsPage() {
   const { data, isLoading, isError } = useAccounts()
   const { format, convert, currency } = useCurrency()
   const queryClient = useQueryClient()
+  const [deletingId, setDeletingId] = useState<string | null>(null)
+
+  const safeNumber = (value: unknown) => {
+    const num = Number(value)
+    return Number.isFinite(num) ? num : 0
+  }
 
   const totals = useMemo(() => {
     if (!data?.length) return null
-    const sum = data.reduce((acc, account) => acc + convert(account.balance, account.currency as 'USD' | 'CAD'), 0)
+    const sum = data.reduce(
+      (acc, account) => acc + safeNumber(convert(safeNumber(account.balance), account.currency as 'USD' | 'CAD')),
+      0,
+    )
     const positive = data.filter((a) => a.balance >= 0).length
     return { sum, currency, positive }
   }, [convert, currency, data])
 
-  if (isLoading) {
+  if (isError) {
+    return <p className="text-sm text-danger">Unable to load accounts.</p>
+  }
+
+  if (isLoading || !data) {
     return (
       <div className="space-y-4">
         <Skeleton className="h-12 w-52 rounded-2xl" />
@@ -44,15 +57,11 @@ export function AccountsPage() {
     )
   }
 
-  if (isError || !data) {
-    return <p className="text-sm text-danger">Unable to load accounts.</p>
-  }
-
   const chartData = useMemo(
     () =>
       (data ?? []).map((account) => ({
         ...account,
-        balance: convert(account.balance, account.currency as 'USD' | 'CAD'),
+        balance: safeNumber(convert(safeNumber(account.balance), account.currency as 'USD' | 'CAD')),
         currency,
       })),
     [convert, currency, data],
@@ -122,17 +131,22 @@ export function AccountsPage() {
                   {!account.protected ? (
                     <button
                       type="button"
-                      className="rounded-full bg-red-600 p-2 text-white shadow-sm transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400"
+                      className="rounded-full bg-red-600 p-2 text-white shadow-sm transition hover:bg-red-700 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 disabled:cursor-not-allowed disabled:opacity-60"
+                      disabled={deletingId === account.id}
                       onClick={async () => {
+                        if (deletingId) return
                         const confirmed = window.confirm(`Delete account "${account.name}"? This will remove its transactions.`)
                         if (!confirmed) return
                         try {
+                          setDeletingId(account.id)
                           await deleteAccount(account.id)
                           void queryClient.invalidateQueries({ queryKey: ['accounts'] })
                           void queryClient.invalidateQueries({ queryKey: ['transactions'] })
                           void queryClient.invalidateQueries({ queryKey: ['kpi-summary'] })
                         } catch (err) {
                           alert('Unable to delete account. Make sure the balance is zero.')
+                        } finally {
+                          setDeletingId(null)
                         }
                       }}
                       aria-label={`Delete ${account.name}`}

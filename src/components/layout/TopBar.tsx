@@ -27,7 +27,7 @@ export function TopBar() {
   return (
     <header className="relative z-20 flex flex-wrap items-center justify-between gap-4 border-b border-surface-200 bg-white/70 px-6 py-4 text-surface-900 backdrop-blur dark:border-white/5 dark:bg-surface-950/60 dark:text-white">
       <div className="flex flex-col gap-1">
-        <p className="text-xs uppercase tracking-[0.4em] text-brand-500 dark:text-brand-300">Overview</p>
+        <p className="text-xs uppercase tracking-[0.4em] text-emerald-700 dark:text-brand-300">Overview</p>
         <h1 className="text-xl font-semibold">Breno Finance</h1>
       </div>
 
@@ -57,7 +57,7 @@ export function TopBar() {
               type="button"
               variant={type === opt.value ? 'secondary' : 'ghost'}
               size="sm"
-              className={type === opt.value ? 'bg-brand-500/20 text-brand-700 dark:text-white' : 'text-surface-600 dark:text-slate-200'}
+              className={type === opt.value ? 'bg-brand-500/20 text-emerald-700 dark:text-white' : 'text-surface-600 dark:text-slate-200'}
               onClick={() => setType(opt.value as typeof type)}
             >
               {opt.label}

@@ -29,6 +29,7 @@ export function SignupPage() {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (loading) return
     setError(null)
     setLoading(true)
     try {
@@ -64,7 +65,7 @@ export function SignupPage() {
       <Card className="w-full max-w-md border-white/10 bg-surface-950/70 backdrop-blur">
         <form onSubmit={handleSubmit} className="space-y-6">
           <CardHeader>
-            <p className="text-xs uppercase tracking-[0.4em] text-brand-300">Breno Finance</p>
+            <p className="text-xs uppercase tracking-[0.4em] text-emerald-700 dark:text-brand-300">Breno Finance</p>
             <CardTitle className="text-white">Create your account</CardTitle>
             <CardDescription>Set currency and locale from the start.</CardDescription>
           </CardHeader>
@@ -112,7 +113,7 @@ export function SignupPage() {
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'Creating...' : 'Sign up'}
             </Button>
-            <Button type="button" variant="ghost" className="w-full" onClick={() => navigate('/login')}>
+            <Button type="button" variant="ghost" className="w-full" disabled={loading} onClick={() => navigate('/login')}>
               Already have an account? Log in
             </Button>
           </CardFooter>

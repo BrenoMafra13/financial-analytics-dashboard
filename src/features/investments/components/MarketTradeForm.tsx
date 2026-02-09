@@ -41,6 +41,7 @@ export function MarketTradeForm() {
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (mutation.isPending) return
     if (!selectedAsset || !selectedAccount || !form.quantity) {
       setError('Please select an asset, account, and quantity.')
       return

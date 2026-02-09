@@ -7,9 +7,9 @@ import { useCurrency } from '@/hooks/useCurrency'
 
 const navigation = [
   { label: 'Dashboard', to: '/dashboard', icon: LayoutDashboard },
-  { label: 'Accounts', to: '/accounts', icon: Wallet },
   { label: 'Investments', to: '/investments', icon: LineChart },
   { label: 'Expenses', to: '/expenses', icon: CreditCard },
+  { label: 'Accounts', to: '/accounts', icon: Wallet },
   { label: 'Settings', to: '/settings', icon: Settings },
 ]
 
@@ -24,7 +24,7 @@ export function Sidebar() {
   return (
     <aside className="hidden w-72 flex-col border-r border-surface-100 bg-white/80 px-5 py-8 text-surface-700 shadow-card backdrop-blur-xl dark:border-white/5 dark:bg-surface-950/90 dark:text-white lg:flex">
       <div className="px-1">
-        <p className="text-xs font-semibold uppercase tracking-[0.4em] text-brand-500 dark:text-brand-300">
+        <p className="text-xs font-semibold uppercase tracking-[0.4em] text-emerald-700 dark:text-brand-300">
           Breno Finance
         </p>
         <p className="mt-2 text-lg font-semibold text-surface-900 dark:text-white">Control center</p>

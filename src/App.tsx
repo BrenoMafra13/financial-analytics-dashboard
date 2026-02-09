@@ -30,9 +30,9 @@ function App() {
         >
           <Route path="/home" element={<Navigate to="/dashboard" replace />} />
           <Route path="/dashboard" element={<OverviewPage />} />
-          <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/investments" element={<InvestmentsPage />} />
           <Route path="/expenses" element={<ExpensesPage />} />
+          <Route path="/accounts" element={<AccountsPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />

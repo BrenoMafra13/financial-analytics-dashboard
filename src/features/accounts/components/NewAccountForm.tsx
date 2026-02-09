@@ -52,6 +52,7 @@ export function NewAccountForm() {
 
   const handleSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault()
+    if (mutation.isPending) return
     if (!form.name || !form.type || !form.currency || form.balance === '') {
       setError('Please fill all required fields.')
       return
