@@ -28,11 +28,17 @@ export interface OllieModePayload {
   retryAfterMs?: number
 }
 
+export interface OllieNavigateAction {
+  type: 'navigate'
+  path: '/dashboard' | '/investments' | '/expenses' | '/accounts' | '/settings'
+}
+
 interface OllieChatResponse {
   reply: string
   mode: 'live' | 'guidance'
   guidanceReason?: string | null
   quota: OllieQuota
+  actions?: OllieNavigateAction[]
 }
 
 interface OllieApiError {

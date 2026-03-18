@@ -159,6 +159,27 @@ function parseSimpleMath(question) {
   return Number.isInteger(result) ? String(result) : String(Number(result.toFixed(6)))
 }
 
+function parseAmountFromText(question) {
+  const match = String(question || '').match(/(?:\$|usd|cad|brl)?\s*([0-9]+(?:[.,][0-9]{1,2})?)/i)
+  if (!match) return null
+  const value = Number(String(match[1]).replace(',', '.'))
+  return Number.isFinite(value) && value > 0 ? value : null
+}
+
+function detectIntentFlags(question) {
+  const q = String(question || '').toLowerCase()
+  const hasExpenseTerm = /(expense|expenses|spent|spend|despesa|despesas|gastei|gasto|gastos)/.test(q)
+  const hasIncomeTerm = /(income|incomes|salary|salaries|earn|earned|receita|receitas|ganho|ganhos)/.test(q)
+  const hasViewTerm = /(see|show|view|track|analy[sz]e|last|month|months|week|weeks|day|days|ver|mostrar|acompanhar|ultim|mes|m[eê]s|semana|dia)/.test(q)
+  const hasAddTerm = /(add|register|record|log|create|new|adicionar|registrar|lancar|lan[çc]ar|criar|nova|novo)/.test(q)
+  return {
+    hasExpenseTerm,
+    hasIncomeTerm,
+    hasViewTerm,
+    hasAddTerm,
+  }
+}
+
 function buildDeterministicReply({ context, latestUserMessage }) {
   const path = context?.pathname || '/dashboard'
   const hint = mapPathToHint(path)
@@ -172,6 +193,9 @@ function buildDeterministicReply({ context, latestUserMessage }) {
     return language === 'pt' ? `Resultado: ${math}.` : `Result: ${math}.`
   }
 
+  const amountFromQuestion = parseAmountFromText(questionRaw)
+  const intents = detectIntentFlags(question)
+
   if (/^(hi|hello|hey|oi|ola|olá)$/i.test(questionRaw)) {
     return language === 'pt'
       ? 'Oi! Eu sou a Ollie. Posso te guiar no app financeiro. Diga o que você quer fazer.'
@@ -184,10 +208,44 @@ function buildDeterministicReply({ context, latestUserMessage }) {
       : 'To see your accounts: click Accounts in the left sidebar. You will see balances, account types, and institutions there.'
   }
 
+  const wantsExpenseView = intents.hasExpenseTerm && intents.hasViewTerm
+  const wantsIncomeView = intents.hasIncomeTerm && intents.hasViewTerm
+  const wantsExpenseAdd = intents.hasExpenseTerm && intents.hasAddTerm
+  const wantsIncomeAdd = intents.hasIncomeTerm && intents.hasAddTerm
+
+  if (wantsExpenseView) {
+    return language === 'pt'
+      ? 'Para ver despesas por período: abra Expenses, use Search expenses para filtrar e ajuste o intervalo (ex.: último mês ou últimos dias).'
+      : 'To view expenses by period: open Expenses, use Search expenses to filter, and set the date range (for example, last month or last days).'
+  }
+
+  if (wantsIncomeView) {
+    return language === 'pt'
+      ? 'Para ver receitas por período: abra Expenses, filtre por Income e ajuste o intervalo para os últimos 7 dias, mês ou período desejado.'
+      : 'To view income by period: open Expenses, filter by Income, and set the range to last 7 days, last month, or your chosen period.'
+  }
+
+  if (wantsExpenseAdd) {
+    const amountHint = amountFromQuestion
+      ? language === 'pt'
+        ? ` com ${amountFromQuestion.toFixed(2)}`
+        : ` with ${amountFromQuestion.toFixed(2)}`
+      : ''
+    return language === 'pt'
+      ? `Para adicionar despesa${amountHint}: vá em Expenses > New Transaction, escolha Expense, informe descrição/categoria/data e salve.`
+      : `To add an expense${amountHint}: go to Expenses > New Transaction, choose Expense, add description/category/date, and save.`
+  }
+
   if (question.includes('expense') || question.includes('despesa') || question.includes('spent') || question.includes('gastei')) {
     return language === 'pt'
       ? 'Para adicionar despesa: vá em Expenses > New Transaction, escolha type Expense, informe valor/data/descrição, selecione conta e categoria e salve.'
       : 'To add an expense: go to Expenses > New Transaction, choose type Expense, enter amount/date/description, select account and category, then save.'
+  }
+
+  if (wantsIncomeAdd) {
+    return language === 'pt'
+      ? 'Para adicionar receita: vá em Expenses > New Transaction, escolha Income, preencha valor/categoria/data e salve.'
+      : 'To add income: go to Expenses > New Transaction, choose Income, fill amount/category/date, and save.'
   }
 
   if (question.includes('income') || question.includes('receita') || question.includes('salary') || question.includes('earned')) {
@@ -294,13 +352,59 @@ function parseErrorMessage(errorBody, status) {
 }
 
 function getLatestUserMessage(messages) {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const msg = messages[i]
+  const safe = Array.isArray(messages) ? messages : []
+  for (let i = safe.length - 1; i >= 0; i -= 1) {
+    const msg = safe[i]
     if (msg?.role === 'user' && typeof msg?.content === 'string' && msg.content.trim()) {
       return msg.content.trim()
     }
   }
   return ''
+}
+
+function getModelCandidates(model) {
+  const fromPrimary = String(model || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const fromEnv = String(process.env.GEMINI_FALLBACK_MODELS || '')
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean)
+
+  const defaults = ['gemini-2.5-flash', 'gemini-2.0-flash-lite']
+  const merged = [...fromPrimary, ...fromEnv, ...defaults]
+  return Array.from(new Set(merged))
+}
+
+async function callGeminiModel({ apiKey, modelName, messages, userName, context }) {
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      systemInstruction: {
+        role: 'system',
+        parts: [{ text: buildSystemPrompt({ userName, context }) }],
+      },
+      contents: toGeminiContents(messages),
+      generationConfig: {
+        temperature: 0.4,
+        topP: 0.9,
+        maxOutputTokens: 450,
+      },
+    }),
+  })
+
+  let data = null
+  try {
+    data = await response.json()
+  } catch {
+    data = null
+  }
+
+  return { response, data }
 }
 
 function buildFallbackReply({ context, latestUserMessage }) {
@@ -457,54 +561,49 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
     }
   }
 
-  if (Date.now() < providerHealth.rateLimitedUntil) {
-    if (FALLBACK_ENABLED) {
-      return {
-        ok: true,
-        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
-        ...buildModePayload({ mode: 'guidance', guidanceReason: 'provider_cooldown', userId: safeUserId }),
-      }
+  const modelCandidates = getModelCandidates(model)
+  let response = null
+  let data = null
+  let lastRateLimitRetryAfterMs = RATE_WINDOW_MS
+
+  for (const modelName of modelCandidates) {
+    const callResult = await callGeminiModel({
+      apiKey,
+      modelName,
+      messages: parsed.data.messages,
+      userName,
+      context: parsed.data.context,
+    })
+    response = callResult.response
+    data = callResult.data
+
+    if (response.ok) {
+      break
     }
 
-    return {
-      ok: false,
-      status: 429,
-      code: 'OLLIE_PROVIDER_COOLDOWN',
-      message: 'Ollie is waiting for provider cooldown. Please try again shortly.',
-      retryAfterMs: Math.max(1000, providerHealth.rateLimitedUntil - Date.now()),
-      quota: getLiveQuota(safeUserId),
+    const errorText = JSON.stringify(data || {})
+    if (isFreeTierExceeded(response.status, errorText)) {
+      lastRateLimitRetryAfterMs = extractRetryAfterMs(data)
+      continue
     }
+
+    break
   }
 
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
-  const response = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      systemInstruction: {
-        role: 'system',
-        parts: [{ text: buildSystemPrompt({ userName, context: parsed.data.context }) }],
-      },
-      contents: toGeminiContents(parsed.data.messages),
-      generationConfig: {
-        temperature: 0.4,
-        topP: 0.9,
-        maxOutputTokens: 450,
-      },
-    }),
-  })
-
-  let data = null
-  try {
-    data = await response.json()
-  } catch {
-    data = null
+  if (!response) {
+    return {
+      ok: false,
+      status: 502,
+      code: 'OLLIE_PROVIDER_ERROR',
+      message: 'Ollie could not reach the AI provider right now.',
+      quota: getLiveQuota(safeUserId),
+    }
   }
 
   if (!response.ok) {
     const errorText = JSON.stringify(data || {})
     if (isFreeTierExceeded(response.status, errorText)) {
-      const retryAfterMs = extractRetryAfterMs(data)
+      const retryAfterMs = lastRateLimitRetryAfterMs
       providerHealth.rateLimitedUntil = Date.now() + retryAfterMs
       providerHealth.reason = 'provider_rate_limited'
 
@@ -525,7 +624,7 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
         return {
           ok: true,
           reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
-          ...buildModePayload({ mode: 'guidance', guidanceReason: 'provider_rate_limited', userId: safeUserId }),
+          ...buildModePayload({ mode: 'live', guidanceReason: null, userId: safeUserId }),
         }
       }
 
@@ -546,7 +645,7 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
       return {
         ok: true,
         reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
-        ...buildModePayload({ mode: 'guidance', guidanceReason: 'provider_unavailable', userId: safeUserId }),
+        ...buildModePayload({ mode: 'live', guidanceReason: null, userId: safeUserId }),
       }
     }
 
@@ -565,7 +664,7 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
       return {
         ok: true,
         reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
-        ...buildModePayload({ mode: 'guidance', guidanceReason: 'empty_provider_response', userId: safeUserId }),
+        ...buildModePayload({ mode: 'live', guidanceReason: null, userId: safeUserId }),
       }
     }
 
@@ -606,8 +705,8 @@ function getOllieStatus({ apiKey, userId }) {
 
   if (Date.now() < providerHealth.rateLimitedUntil) {
     return {
-      mode: 'guidance',
-      guidanceReason: providerHealth.reason || 'provider_cooldown',
+      mode: 'live',
+      guidanceReason: null,
       quota,
       retryAfterMs: Math.max(1000, providerHealth.rateLimitedUntil - Date.now()),
     }

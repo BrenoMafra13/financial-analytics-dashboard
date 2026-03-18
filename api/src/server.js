@@ -17,6 +17,52 @@ app.use(express.json({ limit: '5mb' }))
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 const PORT = process.env.PORT || 4000
 
+function normalizeText(text) {
+  return String(text || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
+function getLatestUserMessage(messages) {
+  const safeMessages = Array.isArray(messages) ? messages : []
+  for (let i = safeMessages.length - 1; i >= 0; i -= 1) {
+    const item = safeMessages[i]
+    if (item?.role === 'user' && typeof item?.content === 'string' && item.content.trim()) {
+      return item.content.trim()
+    }
+  }
+  return ''
+}
+
+function inferBestRoute(message) {
+  const text = normalizeText(message)
+  if (!text) return null
+
+  if (/(invest|investment|investments|trade|asset|stock|etf|crypto|carteira|investimento|ativos)/.test(text)) {
+    return '/investments'
+  }
+
+  if (/(expense|expenses|spend|spent|gasto|gastos|despesa|despesas|budget|orcamento|income|incomes|salary|receita|receitas|ganho|ganhos|filter|filtro)/.test(text)) {
+    return '/expenses'
+  }
+
+  if (/(account|accounts|bank|checking|savings|card|balance|conta|contas|saldo)/.test(text)) {
+    return '/accounts'
+  }
+
+  if (/(profile|settings|config|preferences|perfil|configuracoes|configuracoes)/.test(text)) {
+    return '/settings'
+  }
+
+  if (/(overview|kpi|dashboard|resumo|visao geral)/.test(text)) {
+    return '/dashboard'
+  }
+
+  return null
+}
+
 function signToken(userId) {
   return jwt.sign({ userId }, JWT_SECRET, { expiresIn: '7d' })
 }
@@ -206,6 +252,9 @@ app.get('/ai/ollie/status', (req, res) => {
 
 app.post('/ai/ollie/chat', async (req, res) => {
   try {
+    const latestUserMessage = getLatestUserMessage(req.body?.messages)
+    const suggestedPath = inferBestRoute(latestUserMessage)
+
     const forwarded = String(req.headers['x-forwarded-for'] || '')
     const forwardedIp = forwarded.split(',').map((item) => item.trim()).filter(Boolean)[0]
     const clientIp = forwardedIp || req.ip || req.socket?.remoteAddress || 'unknown-ip'
@@ -235,6 +284,7 @@ app.post('/ai/ollie/chat', async (req, res) => {
       mode: result.mode,
       guidanceReason: result.guidanceReason,
       quota: result.quota,
+      actions: suggestedPath ? [{ type: 'navigate', path: suggestedPath }] : [],
     })
   } catch (err) {
     console.error('Ollie chat error', err)

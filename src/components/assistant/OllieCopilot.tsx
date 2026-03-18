@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { Bot, SendHorizonal, Sparkles, X } from 'lucide-react'
 import { askOllie, fetchOllieStatus, OllieError, type OllieQuota } from '@/services/ollie'
 import { useUserStore } from '@/store/user'
@@ -45,6 +45,7 @@ function parseRetryWindow(retryAfterMs?: number) {
 }
 
 export function OllieCopilot() {
+  const navigate = useNavigate()
   const location = useLocation()
   const userId = useUserStore((state) => state.user?.id)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
@@ -52,7 +53,7 @@ export function OllieCopilot() {
   const [loading, setLoading] = useState(false)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<OllieMessage[]>([])
-  const [mode, setMode] = useState<'live' | 'guidance'>('guidance')
+  const [mode, setMode] = useState<'live' | 'guidance'>('live')
   const [quota, setQuota] = useState<OllieQuota | null>(null)
   const [guidanceReason, setGuidanceReason] = useState<string | null>(null)
   const [dayKey, setDayKey] = useState(getCurrentDayKey)
@@ -113,12 +114,21 @@ export function OllieCopilot() {
       try {
         const status = await fetchOllieStatus()
         if (!mounted) return
-        setMode(status.mode)
-        setGuidanceReason(status.guidanceReason || null)
+        const isProviderTransientGuidance =
+          status.mode === 'guidance' &&
+          (status.guidanceReason === 'provider_rate_limited' || status.guidanceReason === 'provider_cooldown')
+
+        if (isProviderTransientGuidance) {
+          setMode('live')
+          setGuidanceReason(null)
+        } else {
+          setMode(status.mode)
+          setGuidanceReason(status.guidanceReason || null)
+        }
         setQuota(status.quota)
       } catch {
         if (!mounted) return
-        setMode('guidance')
+        setMode('live')
         setGuidanceReason('status_unavailable')
       }
     })()
@@ -166,6 +176,10 @@ export function OllieCopilot() {
       setQuota(response.quota)
 
       appendAssistantMessage(response.reply)
+      const nextPath = response.actions?.[0]?.path
+      if (nextPath && nextPath !== location.pathname) {
+        navigate(nextPath)
+      }
     } catch (error) {
       if (error instanceof OllieError && error.quota) {
         setQuota(error.quota)
