@@ -96,6 +96,17 @@ export function OllieCopilot() {
     }
   }, [messages, open])
 
+  function appendAssistantMessage(content: string) {
+    setMessages((prev) => {
+      const assistantMessage: OllieMessage = {
+        id: makeId(),
+        role: 'assistant',
+        content,
+      }
+      return [...prev, assistantMessage].slice(-MAX_MESSAGES)
+    })
+  }
+
   async function handleSend() {
     const content = input.trim()
     if (!content || loading) return
@@ -112,51 +123,16 @@ export function OllieCopilot() {
         { pathname: location.pathname, pageTitle },
       )
 
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: makeId(),
-          role: 'assistant',
-          content: response.reply,
-        },
-      ].slice(-MAX_MESSAGES))
+      appendAssistantMessage(response.reply)
     } catch (error) {
       if (error instanceof OllieError && error.code === 'OLLIE_FREE_TIER_LOCKED') {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: makeId(),
-            role: 'assistant',
-            content: `Ollie monthly free-tier usage was reached. Chat unlocks automatically on ${parseResetDate(error.resetAt)}.`,
-          },
-        ].slice(-MAX_MESSAGES))
+        appendAssistantMessage(`Ollie monthly free-tier usage was reached. Chat unlocks automatically on ${parseResetDate(error.resetAt)}.`)
       } else if (error instanceof OllieError && String(error.code || '').startsWith('OLLIE_') && error.status === 429) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: makeId(),
-            role: 'assistant',
-            content: `${error.message} Please wait ${parseRetryWindow(error.retryAfterMs)} and try again.`,
-          },
-        ].slice(-MAX_MESSAGES))
+        appendAssistantMessage(`${error.message} Please wait ${parseRetryWindow(error.retryAfterMs)} and try again.`)
       } else if (error instanceof OllieError) {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: makeId(),
-            role: 'assistant',
-            content: error.message,
-          },
-        ].slice(-MAX_MESSAGES))
+        appendAssistantMessage(error.message)
       } else {
-        setMessages((prev) => [
-          ...prev,
-          {
-            id: makeId(),
-            role: 'assistant',
-            content: 'I could not respond right now. Please try again in a few seconds.',
-          },
-        ].slice(-MAX_MESSAGES))
+        appendAssistantMessage('I could not respond right now. Please try again in a few seconds.')
       }
     } finally {
       setLoading(false)
