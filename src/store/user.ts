@@ -6,8 +6,15 @@ const OLLIE_STORAGE_PREFIX = 'ollie-chat-v1'
 
 function clearOllieSessionForUser(userId?: string) {
   if (typeof window === 'undefined') return
-  const scopedKey = `${OLLIE_STORAGE_PREFIX}:${userId || 'anonymous'}`
-  window.sessionStorage.removeItem(scopedKey)
+  const prefix = `${OLLIE_STORAGE_PREFIX}:${userId || 'anonymous'}:`
+  const keys: string[] = []
+  for (let i = 0; i < window.sessionStorage.length; i += 1) {
+    const key = window.sessionStorage.key(i)
+    if (key && key.startsWith(prefix)) {
+      keys.push(key)
+    }
+  }
+  keys.forEach((key) => window.sessionStorage.removeItem(key))
   window.sessionStorage.removeItem(OLLIE_STORAGE_PREFIX)
 }
 

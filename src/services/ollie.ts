@@ -12,8 +12,9 @@ export interface OllieContext {
 }
 
 export interface OllieQuota {
-  cycle: 'monthly'
-  monthKey: string
+  cycle: 'daily' | 'monthly'
+  dayKey?: string
+  monthKey?: string
   limit: number
   used: number
   remaining: number
@@ -24,6 +25,7 @@ export interface OllieModePayload {
   guidanceReason?: string | null
   quota: OllieQuota
   resetAt?: string
+  retryAfterMs?: number
 }
 
 interface OllieChatResponse {

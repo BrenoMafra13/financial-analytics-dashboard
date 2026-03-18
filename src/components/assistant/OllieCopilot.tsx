@@ -13,6 +13,10 @@ type OllieMessage = {
 const STORAGE_KEY = 'ollie-chat-v1'
 const MAX_MESSAGES = 10
 
+function getCurrentDayKey() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 const pageTitles: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/investments': 'Investments',
@@ -50,9 +54,20 @@ export function OllieCopilot() {
   const [messages, setMessages] = useState<OllieMessage[]>([])
   const [mode, setMode] = useState<'live' | 'guidance'>('guidance')
   const [quota, setQuota] = useState<OllieQuota | null>(null)
+  const [guidanceReason, setGuidanceReason] = useState<string | null>(null)
+  const [dayKey, setDayKey] = useState(getCurrentDayKey)
 
   const pageTitle = useMemo(() => pageTitles[location.pathname] || 'Finance App', [location.pathname])
-  const storageKey = useMemo(() => `${STORAGE_KEY}:${userId || 'anonymous'}`, [userId])
+  const storageKey = useMemo(() => `${STORAGE_KEY}:${userId || 'anonymous'}:${dayKey}`, [userId, dayKey])
+
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      const nowDay = getCurrentDayKey()
+      setDayKey((prev) => (prev === nowDay ? prev : nowDay))
+    }, 60 * 1000)
+
+    return () => window.clearInterval(timer)
+  }, [])
 
   useEffect(() => {
     const raw = sessionStorage.getItem(storageKey)
@@ -99,10 +114,12 @@ export function OllieCopilot() {
         const status = await fetchOllieStatus()
         if (!mounted) return
         setMode(status.mode)
+        setGuidanceReason(status.guidanceReason || null)
         setQuota(status.quota)
       } catch {
         if (!mounted) return
         setMode('guidance')
+        setGuidanceReason('status_unavailable')
       }
     })()
 
@@ -145,12 +162,16 @@ export function OllieCopilot() {
       )
 
       setMode(response.mode)
+      setGuidanceReason(response.guidanceReason || null)
       setQuota(response.quota)
 
       appendAssistantMessage(response.reply)
     } catch (error) {
       if (error instanceof OllieError && error.quota) {
         setQuota(error.quota)
+      }
+      if (error instanceof OllieError) {
+        setGuidanceReason('request_error')
       }
       if (error instanceof OllieError && error.code === 'OLLIE_FREE_TIER_LOCKED') {
         appendAssistantMessage(`Ollie monthly free-tier usage was reached. Chat unlocks automatically on ${parseResetDate(error.resetAt)}.`)
@@ -165,6 +186,35 @@ export function OllieCopilot() {
       setLoading(false)
     }
   }
+
+  const quotaLabel = useMemo(() => {
+    if (!quota) return 'Loading request quota...'
+    const cycleLabel = quota.cycle === 'daily' ? 'today' : 'this month'
+    return `${quota.remaining}/${quota.limit} AI Live requests left ${cycleLabel}`
+  }, [quota])
+
+  const guidanceLabel = useMemo(() => {
+    if (mode !== 'guidance') return null
+    if (guidanceReason === 'provider_rate_limited' || guidanceReason === 'provider_cooldown') {
+      return 'Provider is rate-limited. Ollie is using Guidance Mode temporarily.'
+    }
+    if (guidanceReason === 'OLLIE_RATE_LIMIT_USER' || guidanceReason === 'OLLIE_RATE_LIMIT_IP') {
+      return 'Message rate limit reached. Ollie is using Guidance Mode briefly.'
+    }
+    if (guidanceReason === 'OLLIE_CHAR_LIMIT_USER' || guidanceReason === 'OLLIE_CHAR_LIMIT_IP') {
+      return 'Message length limit reached. Ollie is using Guidance Mode briefly.'
+    }
+    if (guidanceReason === 'daily_live_budget_reached') {
+      return 'Your AI Live daily budget was reached. Guidance Mode is active.'
+    }
+    if (guidanceReason === 'monthly_live_budget_reached') {
+      return 'Your AI Live monthly budget was reached. Guidance Mode is active.'
+    }
+    if (guidanceReason === 'missing_api_key') {
+      return 'AI provider key is missing. Guidance Mode is active.'
+    }
+    return 'Guidance Mode is active.'
+  }, [mode, guidanceReason])
 
   return (
     <>
@@ -190,10 +240,9 @@ export function OllieCopilot() {
                   </span>
                 </div>
                 <p className="mt-1 text-[11px] text-surface-600 dark:text-slate-300">
-                  {quota
-                    ? `${quota.remaining}/${quota.limit} AI Live requests left this month`
-                    : 'Loading request quota...'}
+                  {quotaLabel}
                 </p>
+                {guidanceLabel ? <p className="mt-1 max-w-[15.5rem] text-[10px] text-amber-700 dark:text-amber-300">{guidanceLabel}</p> : null}
               </div>
             </div>
             <button

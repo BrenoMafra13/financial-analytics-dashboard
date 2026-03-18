@@ -9,11 +9,11 @@ function getIntEnv(name, fallback) {
 }
 
 const RATE_WINDOW_MS = 60 * 1000
-const USER_REQUESTS_PER_MINUTE = getIntEnv('OLLIE_USER_REQUESTS_PER_MINUTE', 12)
-const IP_REQUESTS_PER_MINUTE = getIntEnv('OLLIE_IP_REQUESTS_PER_MINUTE', 30)
+const USER_REQUESTS_PER_MINUTE = getIntEnv('OLLIE_USER_REQUESTS_PER_MINUTE', 4)
+const IP_REQUESTS_PER_MINUTE = getIntEnv('OLLIE_IP_REQUESTS_PER_MINUTE', 5)
 const USER_CHARS_PER_MINUTE = getIntEnv('OLLIE_USER_CHARS_PER_MINUTE', 1800)
 const IP_CHARS_PER_MINUTE = getIntEnv('OLLIE_IP_CHARS_PER_MINUTE', 5000)
-const LIVE_REQUESTS_PER_MONTH = getIntEnv('OLLIE_LIVE_REQUESTS_PER_MONTH', 80)
+const LIVE_REQUESTS_PER_DAY = getIntEnv('OLLIE_LIVE_REQUESTS_PER_DAY', 20)
 const MONTHLY_LOCK_ENABLED = String(process.env.OLLIE_MONTHLY_LOCK_ENABLED || 'false').toLowerCase() === 'true'
 const FALLBACK_ENABLED = String(process.env.OLLIE_FALLBACK_ENABLED || 'true').toLowerCase() !== 'false'
 
@@ -35,19 +35,27 @@ const freeTierLock = {
 
 const userBuckets = new Map()
 const ipBuckets = new Map()
-const userMonthlyLiveUsage = new Map()
+const userDailyLiveUsage = new Map()
+const providerHealth = {
+  rateLimitedUntil: 0,
+  reason: null,
+}
 
 function getCurrentMonthKey() {
   const now = new Date()
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
 }
 
+function getCurrentDayKey() {
+  return new Date().toISOString().slice(0, 10)
+}
+
 function getUserLiveUsageBucket(userId) {
-  const monthKey = getCurrentMonthKey()
-  const existing = userMonthlyLiveUsage.get(userId)
-  if (!existing || existing.monthKey !== monthKey) {
-    const fresh = { monthKey, used: 0 }
-    userMonthlyLiveUsage.set(userId, fresh)
+  const dayKey = getCurrentDayKey()
+  const existing = userDailyLiveUsage.get(userId)
+  if (!existing || existing.dayKey !== dayKey) {
+    const fresh = { dayKey, used: 0 }
+    userDailyLiveUsage.set(userId, fresh)
     return fresh
   }
   return existing
@@ -56,18 +64,18 @@ function getUserLiveUsageBucket(userId) {
 function getLiveQuota(userId) {
   const bucket = getUserLiveUsageBucket(userId)
   return {
-    cycle: 'monthly',
-    monthKey: bucket.monthKey,
-    limit: LIVE_REQUESTS_PER_MONTH,
+    cycle: 'daily',
+    dayKey: bucket.dayKey,
+    limit: LIVE_REQUESTS_PER_DAY,
     used: bucket.used,
-    remaining: Math.max(0, LIVE_REQUESTS_PER_MONTH - bucket.used),
+    remaining: Math.max(0, LIVE_REQUESTS_PER_DAY - bucket.used),
   }
 }
 
 function consumeLiveQuota(userId) {
   const bucket = getUserLiveUsageBucket(userId)
   bucket.used += 1
-  userMonthlyLiveUsage.set(userId, bucket)
+  userDailyLiveUsage.set(userId, bucket)
   return getLiveQuota(userId)
 }
 
@@ -119,6 +127,92 @@ function mapPathToHint(pathname = '/dashboard') {
   return map[pathname] || 'Finance app navigation page.'
 }
 
+function mapPathToAction(pathname = '/dashboard') {
+  const map = {
+    '/dashboard': 'Use the left sidebar to jump to Accounts, Expenses, Investments, or Settings.',
+    '/investments': 'Use the trade form on this page to buy/sell and review holdings.',
+    '/expenses': 'Use New Transaction and filters on this page to track spending and income.',
+    '/accounts': 'Review balances and manage your linked accounts here.',
+    '/settings': 'Update profile, currency, and personal preferences here.',
+  }
+  return map[pathname] || 'Use the left sidebar to navigate to the target page.'
+}
+
+function detectLanguage(text) {
+  const normalized = String(text || '').toLowerCase()
+  if (/\b(oi|ola|olá|quanto|gastei|conta|despesa|receita|investimento|como|onde)\b/.test(normalized)) {
+    return 'pt'
+  }
+  return 'en'
+}
+
+function parseSimpleMath(question) {
+  const normalized = String(question || '').replace(/,/g, '.').trim()
+  const match = normalized.match(/(-?\d+(?:\.\d+)?)\s*([+\-*/])\s*(-?\d+(?:\.\d+)?)/)
+  if (!match) return null
+  const a = Number(match[1])
+  const b = Number(match[3])
+  const op = match[2]
+  if (!Number.isFinite(a) || !Number.isFinite(b)) return null
+  if (op === '/' && b === 0) return 'Division by zero is not allowed.'
+  const result = op === '+' ? a + b : op === '-' ? a - b : op === '*' ? a * b : a / b
+  return Number.isInteger(result) ? String(result) : String(Number(result.toFixed(6)))
+}
+
+function buildDeterministicReply({ context, latestUserMessage }) {
+  const path = context?.pathname || '/dashboard'
+  const hint = mapPathToHint(path)
+  const action = mapPathToAction(path)
+  const questionRaw = String(latestUserMessage || '').trim()
+  const question = questionRaw.toLowerCase()
+  const language = detectLanguage(questionRaw)
+
+  const math = parseSimpleMath(questionRaw)
+  if (math) {
+    return language === 'pt' ? `Resultado: ${math}.` : `Result: ${math}.`
+  }
+
+  if (/^(hi|hello|hey|oi|ola|olá)$/i.test(questionRaw)) {
+    return language === 'pt'
+      ? 'Oi! Eu sou a Ollie. Posso te guiar no app financeiro. Diga o que você quer fazer.'
+      : 'Hi! I am Ollie. I can guide you in the finance app. Tell me what you want to do.'
+  }
+
+  if (question.includes('account') || question.includes('accounts') || question.includes('conta') || question.includes('contas')) {
+    return language === 'pt'
+      ? 'Para ver suas contas: clique em Accounts no menu lateral esquerdo. Lá você vê saldos, tipo de conta e instituição.'
+      : 'To see your accounts: click Accounts in the left sidebar. You will see balances, account types, and institutions there.'
+  }
+
+  if (question.includes('expense') || question.includes('despesa') || question.includes('spent') || question.includes('gastei')) {
+    return language === 'pt'
+      ? 'Para adicionar despesa: vá em Expenses > New Transaction, escolha type Expense, informe valor/data/descrição, selecione conta e categoria e salve.'
+      : 'To add an expense: go to Expenses > New Transaction, choose type Expense, enter amount/date/description, select account and category, then save.'
+  }
+
+  if (question.includes('income') || question.includes('receita') || question.includes('salary') || question.includes('earned')) {
+    return language === 'pt'
+      ? 'Para adicionar receita: vá em Expenses > New Transaction, escolha type Income, preencha os dados e salve.'
+      : 'To add income: go to Expenses > New Transaction, choose type Income, fill in the details, and save.'
+  }
+
+  if (question.includes('invest') || question.includes('trade') || question.includes('investimento') || question.includes('buy') || question.includes('sell')) {
+    return language === 'pt'
+      ? 'Para investir: abra Investments, use o formulário de trade, escolha ativo, buy/sell, quantidade e conta de origem, e confirme.'
+      : 'To invest: open Investments, use the trade form, choose asset, buy/sell side, quantity, and source account, then confirm.'
+  }
+
+  if (question.includes('settings') || question.includes('config') || question.includes('perfil') || question.includes('profile')) {
+    return language === 'pt'
+      ? 'Para editar preferências: abra Settings no menu lateral. Lá você ajusta perfil, moeda e outras opções.'
+      : 'To edit preferences: open Settings in the left sidebar. You can update profile, currency, and other options there.'
+  }
+
+  return language === 'pt'
+    ? `Estou na rota ${path}. ${hint} ${action}`
+    : `You are currently on ${path}. ${hint} ${action}`
+}
+
 function buildSystemPrompt({ userName, context }) {
   const path = context?.pathname || '/dashboard'
   const pageTitle = context?.pageTitle || 'Finance Dashboard'
@@ -126,8 +220,14 @@ function buildSystemPrompt({ userName, context }) {
 
   return [
     'You are Ollie, the in-app finance navigation copilot.',
-    'Always answer in clear, concise English.',
+    'Always answer in clear, concise language matching the user (English or Portuguese).',
     'Guide users on where to click and what to do on each page.',
+    'Response style rules:',
+    '- Start with a direct answer in 1 sentence.',
+    '- If the user asks for location/action, give short steps (2-4 bullets).',
+    '- If the user asks for detail/explanation, provide a slightly longer explanation with clear steps.',
+    '- For greetings or very short messages, keep the reply short and friendly.',
+    '- For simple math questions, provide only the result plus one short line.',
     'Never say you are Gemini, Google, OpenAI, or any external provider. You are always Ollie.',
     'For risky or sensitive financial actions, recommend manual confirmation before saving.',
     'Do not invent non-existent features. Be explicit about limitations.',
@@ -136,6 +236,22 @@ function buildSystemPrompt({ userName, context }) {
     `Page title: ${pageTitle}.`,
     `Page context: ${pageHint}`,
   ].join('\n')
+}
+
+function extractRetryAfterMs(errorBody) {
+  const details = Array.isArray(errorBody?.error?.details) ? errorBody.error.details : []
+  const retryInfo = details.find((item) => typeof item?.retryDelay === 'string')
+  const retryDelay = retryInfo?.retryDelay
+  if (typeof retryDelay === 'string') {
+    const match = retryDelay.match(/^(\d+)(?:\.(\d+))?s$/)
+    if (match) {
+      const whole = Number(match[1] || 0)
+      const fraction = Number(`0.${match[2] || '0'}`)
+      const ms = Math.round((whole + fraction) * 1000)
+      if (Number.isFinite(ms) && ms > 0) return ms
+    }
+  }
+  return RATE_WINDOW_MS
 }
 
 function sanitizeReply(text) {
@@ -188,45 +304,7 @@ function getLatestUserMessage(messages) {
 }
 
 function buildFallbackReply({ context, latestUserMessage }) {
-  const path = context?.pathname || '/dashboard'
-  const pageHint = mapPathToHint(path)
-  const question = latestUserMessage.toLowerCase()
-
-  if (question.includes('spent') || question.includes('expense') || question.includes('grocery') || question.includes('groceries')) {
-    return [
-      'I can help you record that expense quickly.',
-      '1. Open Expenses and click New Transaction.',
-      '2. Select type Expense.',
-      '3. Enter amount, date, and a short description (for example: groceries).',
-      '4. Choose the account and category, then save.',
-    ].join('\n')
-  }
-
-  if (question.includes('income') || question.includes('salary') || question.includes('earned') || question.includes('received')) {
-    return [
-      'Here is the fastest way to record income:',
-      '1. Go to Expenses and click New Transaction.',
-      '2. Set type to Income.',
-      '3. Enter amount, date, source, and account.',
-      '4. Save to update your dashboard KPIs.',
-    ].join('\n')
-  }
-
-  if (question.includes('invest') || question.includes('investment') || question.includes('trade') || question.includes('buy') || question.includes('sell')) {
-    return [
-      'To place an investment trade:',
-      '1. Open Investments.',
-      '2. Use the trade form to choose asset, side (buy/sell), and quantity.',
-      '3. Select the funding account and confirm.',
-      '4. Review your holdings and account balance updates.',
-    ].join('\n')
-  }
-
-  return [
-    `I can guide you from your current page (${path}).`,
-    `Page context: ${pageHint}`,
-    'Try asking things like: "Where do I add an expense?", "How do I register income?", or "How do I place a trade?"',
-  ].join('\n')
+  return buildDeterministicReply({ context, latestUserMessage })
 }
 
 function shouldActivateMonthlyLock(status, bodyText) {
@@ -319,6 +397,14 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
   const userChars = getLatestUserCharCount(parsed.data.messages)
   const guard = runRateGuard({ userId: safeUserId, clientIp: safeClientIp, userChars })
   if (!guard.ok) {
+    if (FALLBACK_ENABLED) {
+      return {
+        ok: true,
+        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
+        ...buildModePayload({ mode: 'guidance', guidanceReason: guard.code || 'local_rate_limit', userId: safeUserId }),
+      }
+    }
+
     return {
       ok: false,
       status: guard.status,
@@ -371,6 +457,25 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
     }
   }
 
+  if (Date.now() < providerHealth.rateLimitedUntil) {
+    if (FALLBACK_ENABLED) {
+      return {
+        ok: true,
+        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
+        ...buildModePayload({ mode: 'guidance', guidanceReason: 'provider_cooldown', userId: safeUserId }),
+      }
+    }
+
+    return {
+      ok: false,
+      status: 429,
+      code: 'OLLIE_PROVIDER_COOLDOWN',
+      message: 'Ollie is waiting for provider cooldown. Please try again shortly.',
+      retryAfterMs: Math.max(1000, providerHealth.rateLimitedUntil - Date.now()),
+      quota: getLiveQuota(safeUserId),
+    }
+  }
+
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`
   const response = await fetch(endpoint, {
     method: 'POST',
@@ -399,6 +504,10 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
   if (!response.ok) {
     const errorText = JSON.stringify(data || {})
     if (isFreeTierExceeded(response.status, errorText)) {
+      const retryAfterMs = extractRetryAfterMs(data)
+      providerHealth.rateLimitedUntil = Date.now() + retryAfterMs
+      providerHealth.reason = 'provider_rate_limited'
+
       if (shouldActivateMonthlyLock(response.status, errorText)) {
         lockFreeTierForCurrentMonth('Hard quota exceeded')
         return {
@@ -425,10 +534,13 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
         status: 429,
         code: 'OLLIE_PROVIDER_QUOTA',
         message: 'Ollie is temporarily rate-limited by the AI provider. Please try again shortly.',
-        retryAfterMs: RATE_WINDOW_MS,
+        retryAfterMs,
         quota: getLiveQuota(safeUserId),
       }
     }
+
+    providerHealth.rateLimitedUntil = 0
+    providerHealth.reason = 'provider_unavailable'
 
     if (FALLBACK_ENABLED) {
       return {
@@ -466,6 +578,9 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
     }
   }
 
+  providerHealth.rateLimitedUntil = 0
+  providerHealth.reason = null
+
   const quotaAfterLiveResponse = consumeLiveQuota(safeUserId)
   return {
     ok: true,
@@ -489,6 +604,15 @@ function getOllieStatus({ apiKey, userId }) {
     }
   }
 
+  if (Date.now() < providerHealth.rateLimitedUntil) {
+    return {
+      mode: 'guidance',
+      guidanceReason: providerHealth.reason || 'provider_cooldown',
+      quota,
+      retryAfterMs: Math.max(1000, providerHealth.rateLimitedUntil - Date.now()),
+    }
+  }
+
   if (MONTHLY_LOCK_ENABLED && lockStatus.locked) {
     return {
       mode: 'guidance',
@@ -501,7 +625,7 @@ function getOllieStatus({ apiKey, userId }) {
   if (quota.remaining <= 0) {
     return {
       mode: 'guidance',
-      guidanceReason: 'monthly_live_budget_reached',
+      guidanceReason: 'daily_live_budget_reached',
       quota,
     }
   }
