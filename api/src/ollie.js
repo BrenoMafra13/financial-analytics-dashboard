@@ -13,6 +13,7 @@ const USER_REQUESTS_PER_MINUTE = getIntEnv('OLLIE_USER_REQUESTS_PER_MINUTE', 12)
 const IP_REQUESTS_PER_MINUTE = getIntEnv('OLLIE_IP_REQUESTS_PER_MINUTE', 30)
 const USER_CHARS_PER_MINUTE = getIntEnv('OLLIE_USER_CHARS_PER_MINUTE', 1800)
 const IP_CHARS_PER_MINUTE = getIntEnv('OLLIE_IP_CHARS_PER_MINUTE', 5000)
+const LIVE_REQUESTS_PER_MONTH = getIntEnv('OLLIE_LIVE_REQUESTS_PER_MONTH', 80)
 const MONTHLY_LOCK_ENABLED = String(process.env.OLLIE_MONTHLY_LOCK_ENABLED || 'false').toLowerCase() === 'true'
 const FALLBACK_ENABLED = String(process.env.OLLIE_FALLBACK_ENABLED || 'true').toLowerCase() !== 'false'
 
@@ -34,10 +35,48 @@ const freeTierLock = {
 
 const userBuckets = new Map()
 const ipBuckets = new Map()
+const userMonthlyLiveUsage = new Map()
 
 function getCurrentMonthKey() {
   const now = new Date()
   return `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
+}
+
+function getUserLiveUsageBucket(userId) {
+  const monthKey = getCurrentMonthKey()
+  const existing = userMonthlyLiveUsage.get(userId)
+  if (!existing || existing.monthKey !== monthKey) {
+    const fresh = { monthKey, used: 0 }
+    userMonthlyLiveUsage.set(userId, fresh)
+    return fresh
+  }
+  return existing
+}
+
+function getLiveQuota(userId) {
+  const bucket = getUserLiveUsageBucket(userId)
+  return {
+    cycle: 'monthly',
+    monthKey: bucket.monthKey,
+    limit: LIVE_REQUESTS_PER_MONTH,
+    used: bucket.used,
+    remaining: Math.max(0, LIVE_REQUESTS_PER_MONTH - bucket.used),
+  }
+}
+
+function consumeLiveQuota(userId) {
+  const bucket = getUserLiveUsageBucket(userId)
+  bucket.used += 1
+  userMonthlyLiveUsage.set(userId, bucket)
+  return getLiveQuota(userId)
+}
+
+function buildModePayload({ mode, guidanceReason, userId }) {
+  return {
+    mode,
+    guidanceReason,
+    quota: getLiveQuota(userId),
+  }
 }
 
 function getNextMonthIso() {
@@ -298,6 +337,27 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
       message: 'Ollie free-tier usage for this month was reached. Chat will unlock automatically next month.',
       resetAt: lockStatus.resetAt,
       retryAfterMs: null,
+      quota: getLiveQuota(safeUserId),
+    }
+  }
+
+  const quotaBeforeRequest = getLiveQuota(safeUserId)
+  if (quotaBeforeRequest.remaining <= 0) {
+    if (FALLBACK_ENABLED) {
+      return {
+        ok: true,
+        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
+        ...buildModePayload({ mode: 'guidance', guidanceReason: 'monthly_live_budget_reached', userId: safeUserId }),
+      }
+    }
+
+    return {
+      ok: false,
+      status: 429,
+      code: 'OLLIE_USER_LIVE_BUDGET_REACHED',
+      message: 'You reached your monthly AI Live request budget for Ollie.',
+      retryAfterMs: null,
+      quota: quotaBeforeRequest,
     }
   }
 
@@ -307,6 +367,7 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
       status: 503,
       code: 'OLLIE_NOT_CONFIGURED',
       message: 'Ollie is not configured. Set GEMINI_API_KEY on the backend.',
+      quota: getLiveQuota(safeUserId),
     }
   }
 
@@ -347,13 +408,15 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
           message: 'Ollie free-tier usage for this month was reached. Chat will unlock automatically next month.',
           resetAt: getNextMonthIso(),
           retryAfterMs: null,
+          quota: getLiveQuota(safeUserId),
         }
       }
 
       if (FALLBACK_ENABLED) {
         return {
           ok: true,
-          reply: `${buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) })}\n\nNote: I am in guidance mode because the AI provider is temporarily rate-limited.`,
+          reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
+          ...buildModePayload({ mode: 'guidance', guidanceReason: 'provider_rate_limited', userId: safeUserId }),
         }
       }
 
@@ -363,13 +426,15 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
         code: 'OLLIE_PROVIDER_QUOTA',
         message: 'Ollie is temporarily rate-limited by the AI provider. Please try again shortly.',
         retryAfterMs: RATE_WINDOW_MS,
+        quota: getLiveQuota(safeUserId),
       }
     }
 
     if (FALLBACK_ENABLED) {
       return {
         ok: true,
-        reply: `${buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) })}\n\nNote: I am in guidance mode because the AI provider is currently unavailable.`,
+        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
+        ...buildModePayload({ mode: 'guidance', guidanceReason: 'provider_unavailable', userId: safeUserId }),
       }
     }
 
@@ -378,6 +443,7 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
       status: response.status,
       code: 'OLLIE_PROVIDER_ERROR',
       message: parseErrorMessage(data, response.status),
+      quota: getLiveQuota(safeUserId),
     }
   }
 
@@ -386,7 +452,8 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
     if (FALLBACK_ENABLED) {
       return {
         ok: true,
-        reply: `${buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) })}\n\nNote: I returned a guided response because the AI output came back empty.`,
+        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
+        ...buildModePayload({ mode: 'guidance', guidanceReason: 'empty_provider_response', userId: safeUserId }),
       }
     }
 
@@ -395,12 +462,58 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
       status: 502,
       code: 'OLLIE_EMPTY_RESPONSE',
       message: 'Ollie could not generate a response right now. Please try again.',
+      quota: getLiveQuota(safeUserId),
     }
   }
 
-  return { ok: true, reply: sanitizeReply(reply) }
+  const quotaAfterLiveResponse = consumeLiveQuota(safeUserId)
+  return {
+    ok: true,
+    reply: sanitizeReply(reply),
+    mode: 'live',
+    guidanceReason: null,
+    quota: quotaAfterLiveResponse,
+  }
+}
+
+function getOllieStatus({ apiKey, userId }) {
+  const safeUserId = String(userId || 'anonymous')
+  const quota = getLiveQuota(safeUserId)
+  const lockStatus = getFreeTierLockStatus()
+
+  if (!apiKey) {
+    return {
+      mode: 'guidance',
+      guidanceReason: 'missing_api_key',
+      quota,
+    }
+  }
+
+  if (MONTHLY_LOCK_ENABLED && lockStatus.locked) {
+    return {
+      mode: 'guidance',
+      guidanceReason: 'provider_monthly_lock',
+      quota,
+      resetAt: lockStatus.resetAt,
+    }
+  }
+
+  if (quota.remaining <= 0) {
+    return {
+      mode: 'guidance',
+      guidanceReason: 'monthly_live_budget_reached',
+      quota,
+    }
+  }
+
+  return {
+    mode: 'live',
+    guidanceReason: null,
+    quota,
+  }
 }
 
 module.exports = {
   askOllie,
+  getOllieStatus,
 }

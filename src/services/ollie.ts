@@ -11,8 +11,26 @@ export interface OllieContext {
   pageTitle?: string
 }
 
+export interface OllieQuota {
+  cycle: 'monthly'
+  monthKey: string
+  limit: number
+  used: number
+  remaining: number
+}
+
+export interface OllieModePayload {
+  mode: 'live' | 'guidance'
+  guidanceReason?: string | null
+  quota: OllieQuota
+  resetAt?: string
+}
+
 interface OllieChatResponse {
   reply: string
+  mode: 'live' | 'guidance'
+  guidanceReason?: string | null
+  quota: OllieQuota
 }
 
 interface OllieApiError {
@@ -20,6 +38,7 @@ interface OllieApiError {
   code?: string
   resetAt?: string
   retryAfterMs?: number
+  quota?: OllieQuota
 }
 
 export class OllieError extends Error {
@@ -27,15 +46,22 @@ export class OllieError extends Error {
   status?: number
   resetAt?: string
   retryAfterMs?: number
+  quota?: OllieQuota
 
-  constructor(message: string, options?: { code?: string; status?: number; resetAt?: string; retryAfterMs?: number }) {
+  constructor(message: string, options?: { code?: string; status?: number; resetAt?: string; retryAfterMs?: number; quota?: OllieQuota }) {
     super(message)
     this.name = 'OllieError'
     this.code = options?.code
     this.status = options?.status
     this.resetAt = options?.resetAt
     this.retryAfterMs = options?.retryAfterMs
+    this.quota = options?.quota
   }
+}
+
+export async function fetchOllieStatus() {
+  const { data } = await api.get<OllieModePayload>('/ai/ollie/status')
+  return data
 }
 
 export async function askOllie(messages: OllieChatMessage[], context?: OllieContext) {
@@ -54,6 +80,7 @@ export async function askOllie(messages: OllieChatMessage[], context?: OllieCont
         status,
         resetAt: data?.resetAt,
         retryAfterMs: data?.retryAfterMs,
+        quota: data?.quota,
       })
     }
     throw new OllieError('Connection to Ollie failed.')

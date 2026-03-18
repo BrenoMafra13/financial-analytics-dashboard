@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const { db, bootstrap, categories } = require('./db')
 const { z } = require('zod')
-const { askOllie } = require('./ollie')
+const { askOllie, getOllieStatus } = require('./ollie')
 
 bootstrap()
 
@@ -188,6 +188,22 @@ app.post('/auth/register', (req, res) => {
 
 app.use(authMiddleware)
 
+app.get('/ai/ollie/status', (req, res) => {
+  try {
+    const status = getOllieStatus({
+      apiKey: process.env.GEMINI_API_KEY,
+      userId: req.userId,
+    })
+    return res.json(status)
+  } catch (err) {
+    console.error('Ollie status error', err)
+    return res.status(500).json({
+      code: 'OLLIE_STATUS_ERROR',
+      message: 'Could not load Ollie status.',
+    })
+  }
+})
+
 app.post('/ai/ollie/chat', async (req, res) => {
   try {
     const forwarded = String(req.headers['x-forwarded-for'] || '')
@@ -210,10 +226,16 @@ app.post('/ai/ollie/chat', async (req, res) => {
         message: result.message,
         resetAt: result.resetAt,
         retryAfterMs: result.retryAfterMs,
+        quota: result.quota,
       })
     }
 
-    return res.json({ reply: result.reply })
+    return res.json({
+      reply: result.reply,
+      mode: result.mode,
+      guidanceReason: result.guidanceReason,
+      quota: result.quota,
+    })
   } catch (err) {
     console.error('Ollie chat error', err)
     return res.status(500).json({

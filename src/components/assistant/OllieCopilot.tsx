@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { Bot, SendHorizonal, Sparkles, X } from 'lucide-react'
-import { askOllie, OllieError } from '@/services/ollie'
+import { askOllie, fetchOllieStatus, OllieError, type OllieQuota } from '@/services/ollie'
 import { useUserStore } from '@/store/user'
 
 type OllieMessage = {
@@ -48,6 +48,8 @@ export function OllieCopilot() {
   const [loading, setLoading] = useState(false)
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<OllieMessage[]>([])
+  const [mode, setMode] = useState<'live' | 'guidance'>('guidance')
+  const [quota, setQuota] = useState<OllieQuota | null>(null)
 
   const pageTitle = useMemo(() => pageTitles[location.pathname] || 'Finance App', [location.pathname])
   const storageKey = useMemo(() => `${STORAGE_KEY}:${userId || 'anonymous'}`, [userId])
@@ -91,6 +93,25 @@ export function OllieCopilot() {
   }, [messages, storageKey])
 
   useEffect(() => {
+    let mounted = true
+    ;(async () => {
+      try {
+        const status = await fetchOllieStatus()
+        if (!mounted) return
+        setMode(status.mode)
+        setQuota(status.quota)
+      } catch {
+        if (!mounted) return
+        setMode('guidance')
+      }
+    })()
+
+    return () => {
+      mounted = false
+    }
+  }, [userId])
+
+  useEffect(() => {
     if (open) {
       messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
     }
@@ -123,8 +144,14 @@ export function OllieCopilot() {
         { pathname: location.pathname, pageTitle },
       )
 
+      setMode(response.mode)
+      setQuota(response.quota)
+
       appendAssistantMessage(response.reply)
     } catch (error) {
+      if (error instanceof OllieError && error.quota) {
+        setQuota(error.quota)
+      }
       if (error instanceof OllieError && error.code === 'OLLIE_FREE_TIER_LOCKED') {
         appendAssistantMessage(`Ollie monthly free-tier usage was reached. Chat unlocks automatically on ${parseResetDate(error.resetAt)}.`)
       } else if (error instanceof OllieError && String(error.code || '').startsWith('OLLIE_') && error.status === 429) {
@@ -150,7 +177,23 @@ export function OllieCopilot() {
               </div>
               <div>
                 <p className="text-sm font-semibold text-surface-900 dark:text-white">Ollie</p>
-                <p className="text-xs text-surface-500 dark:text-slate-300">Your financial copilot</p>
+                <div className="mt-1 flex items-center gap-2">
+                  <p className="text-xs text-surface-500 dark:text-slate-300">Your financial copilot</p>
+                  <span
+                    className={`inline-flex rounded-full px-2 py-0.5 text-[11px] font-semibold leading-none ${
+                      mode === 'live'
+                        ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/20 dark:text-emerald-300'
+                        : 'bg-amber-100 text-amber-700 dark:bg-amber-500/20 dark:text-amber-300'
+                    }`}
+                  >
+                    {mode === 'live' ? 'AI Live' : 'Guidance Mode'}
+                  </span>
+                </div>
+                <p className="mt-1 text-[11px] text-surface-600 dark:text-slate-300">
+                  {quota
+                    ? `${quota.remaining}/${quota.limit} AI Live requests left this month`
+                    : 'Loading request quota...'}
+                </p>
               </div>
             </div>
             <button
