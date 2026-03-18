@@ -52,3 +52,11 @@ https://financial-analytics-dashboard-neon.vercel.app/
 1) Frontend (root):
    - Run: `npm run build`
    - Preview: `npm run preview` (uses `.env.production`)
+
+### Ollie Copilot (Gemini free tier)
+1) Ollie is an AI copilot for financial insights, powered by Google's Gemini (free tier). It provides natural language explanations of user data and trends.
+2) The Ollie chat endpoint is `POST /ai/ollie/chat` (authenticated).
+3) Conversations are not persisted in database.
+4) If the Gemini free tier quota is exceeded, Ollie is automatically blocked for the current month and unlocks at the first day of the next month.
+5) Ollie also enforces anti-abuse limits per user and per IP (requests/min and chars/min) and returns wait time when throttled.
+6) If the AI provider is temporarily limited/unavailable, Ollie can switch to guided fallback mode to keep chat usable.

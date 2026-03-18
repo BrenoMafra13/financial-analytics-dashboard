@@ -6,6 +6,7 @@ const jwt = require('jsonwebtoken')
 const bcrypt = require('bcryptjs')
 const { db, bootstrap, categories } = require('./db')
 const { z } = require('zod')
+const { askOllie } = require('./ollie')
 
 bootstrap()
 
@@ -186,6 +187,41 @@ app.post('/auth/register', (req, res) => {
 })
 
 app.use(authMiddleware)
+
+app.post('/ai/ollie/chat', async (req, res) => {
+  try {
+    const forwarded = String(req.headers['x-forwarded-for'] || '')
+    const forwardedIp = forwarded.split(',').map((item) => item.trim()).filter(Boolean)[0]
+    const clientIp = forwardedIp || req.ip || req.socket?.remoteAddress || 'unknown-ip'
+    const user = db.prepare('SELECT name FROM users WHERE id = ?').get(req.userId)
+    const result = await askOllie({
+      apiKey: process.env.GEMINI_API_KEY,
+      model: process.env.GEMINI_MODEL || 'gemini-2.0-flash-lite',
+      messages: req.body?.messages,
+      context: req.body?.context,
+      userName: user?.name || 'User',
+      userId: req.userId,
+      clientIp,
+    })
+
+    if (!result.ok) {
+      return res.status(result.status).json({
+        code: result.code,
+        message: result.message,
+        resetAt: result.resetAt,
+        retryAfterMs: result.retryAfterMs,
+      })
+    }
+
+    return res.json({ reply: result.reply })
+  } catch (err) {
+    console.error('Ollie chat error', err)
+    return res.status(500).json({
+      code: 'OLLIE_INTERNAL_ERROR',
+      message: 'Ollie is temporarily unavailable. Please try again shortly.',
+    })
+  }
+})
 
 app.get('/me', (req, res) => {
   const user = db.prepare('SELECT * FROM users WHERE id = ?').get(req.userId)

@@ -2,6 +2,15 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { User } from '@/types'
 
+const OLLIE_STORAGE_PREFIX = 'ollie-chat-v1'
+
+function clearOllieSessionForUser(userId?: string) {
+  if (typeof window === 'undefined') return
+  const scopedKey = `${OLLIE_STORAGE_PREFIX}:${userId || 'anonymous'}`
+  window.sessionStorage.removeItem(scopedKey)
+  window.sessionStorage.removeItem(OLLIE_STORAGE_PREFIX)
+}
+
 interface UserState {
   user: User | null
   token: string | null
@@ -13,13 +22,19 @@ interface UserState {
 
 export const useUserStore = create<UserState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       user: null,
       token: null,
       isAuthenticated: false,
       setUser: (user) => set({ user, isAuthenticated: Boolean(user) }),
-      setAuth: (user, token) => set({ user, token, isAuthenticated: true }),
-      logout: () => set({ user: null, token: null, isAuthenticated: false }),
+      setAuth: (user, token) => {
+        clearOllieSessionForUser(user.id)
+        set({ user, token, isAuthenticated: true })
+      },
+      logout: () => {
+        clearOllieSessionForUser(get().user?.id)
+        set({ user: null, token: null, isAuthenticated: false })
+      },
     }),
     {
       name: 'financial-analytics-user',

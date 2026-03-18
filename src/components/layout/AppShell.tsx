@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom'
 import { Sidebar } from './Sidebar'
 import { TopBar } from './TopBar'
+import { OllieCopilot } from '@/components/assistant/OllieCopilot'
 
 export function AppShell() {
   return (
@@ -12,6 +13,7 @@ export function AppShell() {
           <Outlet />
         </main>
       </div>
+      <OllieCopilot />
     </div>
   )
 }
