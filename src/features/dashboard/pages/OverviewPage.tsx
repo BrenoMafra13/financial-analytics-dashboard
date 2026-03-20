@@ -6,9 +6,13 @@ import { TransactionFiltersBar } from '@/components/filters/TransactionFiltersBa
 import { useCashflow } from '@/hooks/useCashflow'
 import { useCurrency } from '@/hooks/useCurrency'
 import { Card } from '@/components/ui/card'
+import { useFilterStore } from '@/store/filters'
+import { daysBetweenIso } from '@/utils/date'
 
 export function OverviewPage() {
-  const { data: cashflow } = useCashflow(30)
+  const period = useFilterStore((state) => state.transactionFilters.period)
+  const days = daysBetweenIso(period.from, period.to)
+  const { data: cashflow } = useCashflow(days)
   const { format } = useCurrency()
   return (
     <section className="space-y-6">

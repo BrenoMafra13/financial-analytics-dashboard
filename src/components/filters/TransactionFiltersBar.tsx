@@ -9,6 +9,8 @@ import { fetchCategories } from '@/services/categories'
 
 export function TransactionFiltersBar() {
   const filters = useFilterStore((state) => state.transactionFilters)
+  const setPeriodPreset = useFilterStore((state) => state.setPeriodPreset)
+  const setType = useFilterStore((state) => state.setType)
   const setCategory = useFilterStore((state) => state.setCategory)
   const setSearch = useFilterStore((state) => state.setSearch)
   const [localSearch, setLocalSearch] = useState(filters.search ?? '')
@@ -32,6 +34,40 @@ export function TransactionFiltersBar() {
       </div>
 
       <div className="w-full max-w-xs">
+        <Select value={filters.period.preset} onChange={(e) => setPeriodPreset(e.target.value as '7d' | '30d' | '90d' | '365d' | 'ytd')}>
+          <option value="7d" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+            Last 7 days
+          </option>
+          <option value="30d" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+            Last 30 days
+          </option>
+          <option value="90d" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+            Last 90 days
+          </option>
+          <option value="365d" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+            Last 365 days
+          </option>
+          <option value="ytd" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+            Year to date
+          </option>
+        </Select>
+      </div>
+
+      <div className="w-full max-w-xs">
+        <Select value={filters.type} onChange={(e) => setType(e.target.value as 'ALL' | 'INCOME' | 'EXPENSE')}>
+          <option value="ALL" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+            All types
+          </option>
+          <option value="INCOME" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+            Income
+          </option>
+          <option value="EXPENSE" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+            Expense
+          </option>
+        </Select>
+      </div>
+
+      <div className="w-full max-w-xs">
         <Select
           value={filters.categoryId ?? ''}
           onChange={(e) => setCategory(e.target.value || undefined)}
@@ -51,12 +87,14 @@ export function TransactionFiltersBar() {
         </Select>
       </div>
 
-      {(filters.categoryId || filters.search) && (
+      {(filters.categoryId || filters.search || filters.type !== 'ALL' || filters.period.preset !== '30d') && (
         <Button
           type="button"
           variant="ghost"
           size="sm"
           onClick={() => {
+            setPeriodPreset('30d')
+            setType('ALL')
             setCategory(undefined)
             setLocalSearch('')
             setSearch(undefined)

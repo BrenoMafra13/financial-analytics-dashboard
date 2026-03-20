@@ -7,6 +7,13 @@ export function useExpenseBreakdown() {
 
   return useQuery({
     queryKey: ['expense-breakdown', filters],
-    queryFn: () => fetchExpenseBreakdown({ from: filters.period.from, to: filters.period.to }),
+    queryFn: () =>
+      fetchExpenseBreakdown({
+        from: filters.period.from,
+        to: filters.period.to,
+        type: filters.type,
+        categoryId: filters.categoryId,
+        search: filters.search,
+      }),
   })
 }

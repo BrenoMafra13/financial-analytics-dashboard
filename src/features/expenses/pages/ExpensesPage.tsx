@@ -13,15 +13,19 @@ import { TransactionFiltersBar } from '@/components/filters/TransactionFiltersBa
 import { NewTransactionForm } from '@/features/transactions/components/NewTransactionForm'
 import { useCurrency } from '@/hooks/useCurrency'
 import { useUserStore } from '@/store/user'
+import { formatDateLabel } from '@/utils/date'
+import { useFilterStore } from '@/store/filters'
 
 function formatDate(date: string) {
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(date))
+  return formatDateLabel(date)
 }
 
 export function ExpensesPage() {
   const [page, setPage] = useState(1)
   const { format, convert, currency } = useCurrency()
   const user = useUserStore((state) => state.user)
+  const periodPreset = useFilterStore((state) => state.transactionFilters.period.preset)
+  const setPeriodPreset = useFilterStore((state) => state.setPeriodPreset)
   const pageSize = 6
   const { data: breakdown, isLoading: loadingBreakdown, isError: errorBreakdown } = useExpenseBreakdown()
   const { data: expenses, isLoading, isError } = useExpenseTransactions(page, pageSize)
@@ -69,15 +73,25 @@ export function ExpensesPage() {
         <Card className="lg:col-span-2 p-0">
           <CardHeader className="flex flex-row items-center justify-between px-6 py-4">
             <CardTitle>Expense breakdown</CardTitle>
-            <Select defaultValue="30" className="w-36 text-surface-900 dark:text-white">
-              <option value="7" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+            <Select
+              value={periodPreset}
+              onChange={(e) => setPeriodPreset(e.target.value as '7d' | '30d' | '90d' | '365d' | 'ytd')}
+              className="w-36 text-surface-900 dark:text-white"
+            >
+              <option value="7d" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
                 Last 7 days
               </option>
-              <option value="30" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+              <option value="30d" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
                 Last 30 days
               </option>
-              <option value="90" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+              <option value="90d" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
                 Last quarter
+              </option>
+              <option value="365d" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+                Last year
+              </option>
+              <option value="ytd" className="bg-white text-surface-900 dark:bg-surface-900 dark:text-white">
+                Year to date
               </option>
             </Select>
           </CardHeader>

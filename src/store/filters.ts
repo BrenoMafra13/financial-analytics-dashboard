@@ -1,20 +1,21 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import type { DateRange, PeriodPreset, TransactionFilters, TransactionFilterType } from '@/types'
+import { toLocalISODate } from '@/utils/date'
 
 const computeRange = (preset: PeriodPreset): DateRange => {
   const now = new Date()
-  const end = now.toISOString().slice(0, 10)
+  const end = toLocalISODate(now)
 
   if (preset === 'ytd') {
-    const start = new Date(now.getFullYear(), 0, 1).toISOString().slice(0, 10)
+    const start = toLocalISODate(new Date(now.getFullYear(), 0, 1))
     return { preset, from: start, to: end }
   }
 
   const days = preset === '7d' ? 7 : preset === '30d' ? 30 : preset === '90d' ? 90 : 365
   const startDate = new Date(now)
   startDate.setDate(now.getDate() - days)
-  const start = startDate.toISOString().slice(0, 10)
+  const start = toLocalISODate(startDate)
   return { preset, from: start, to: end }
 }
 

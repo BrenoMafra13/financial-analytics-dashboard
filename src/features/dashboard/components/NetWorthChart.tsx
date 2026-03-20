@@ -5,10 +5,10 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useNetWorthHistory } from '@/hooks/useNetWorthHistory'
 import { useCurrency } from '@/hooks/useCurrency'
 import type { NetWorthPoint } from '@/types'
+import { formatDateLabel as formatDateSafe } from '@/utils/date'
 
 function formatDateLabel(value: string) {
-  const date = new Date(`${value}T00:00:00`)
-  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  return formatDateSafe(value)
 }
 
 function NetWorthTooltip({

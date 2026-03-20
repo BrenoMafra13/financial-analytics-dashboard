@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local secrets and databases
+.env
+api/.env
+api/src/data.db

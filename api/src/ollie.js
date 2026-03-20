@@ -138,14 +138,6 @@ function mapPathToAction(pathname = '/dashboard') {
   return map[pathname] || 'Use the left sidebar to navigate to the target page.'
 }
 
-function detectLanguage(text) {
-  const normalized = String(text || '').toLowerCase()
-  if (/\b(oi|ola|olá|quanto|gastei|conta|despesa|receita|investimento|como|onde)\b/.test(normalized)) {
-    return 'pt'
-  }
-  return 'en'
-}
-
 function parseSimpleMath(question) {
   const normalized = String(question || '').replace(/,/g, '.').trim()
   const match = normalized.match(/(-?\d+(?:\.\d+)?)\s*([+\-*/])\s*(-?\d+(?:\.\d+)?)/)
@@ -168,10 +160,10 @@ function parseAmountFromText(question) {
 
 function detectIntentFlags(question) {
   const q = String(question || '').toLowerCase()
-  const hasExpenseTerm = /(expense|expenses|spent|spend|despesa|despesas|gastei|gasto|gastos)/.test(q)
-  const hasIncomeTerm = /(income|incomes|salary|salaries|earn|earned|receita|receitas|ganho|ganhos)/.test(q)
-  const hasViewTerm = /(see|show|view|track|analy[sz]e|last|month|months|week|weeks|day|days|ver|mostrar|acompanhar|ultim|mes|m[eê]s|semana|dia)/.test(q)
-  const hasAddTerm = /(add|register|record|log|create|new|adicionar|registrar|lancar|lan[çc]ar|criar|nova|novo)/.test(q)
+  const hasExpenseTerm = /(expense|expenses|spent|spend)/.test(q)
+  const hasIncomeTerm = /(income|incomes|salary|salaries|earn|earned)/.test(q)
+  const hasViewTerm = /(see|show|view|track|analy[sz]e|last|month|months|week|weeks|day|days)/.test(q)
+  const hasAddTerm = /(add|register|record|log|create|new)/.test(q)
   return {
     hasExpenseTerm,
     hasIncomeTerm,
@@ -186,26 +178,21 @@ function buildDeterministicReply({ context, latestUserMessage }) {
   const action = mapPathToAction(path)
   const questionRaw = String(latestUserMessage || '').trim()
   const question = questionRaw.toLowerCase()
-  const language = detectLanguage(questionRaw)
 
   const math = parseSimpleMath(questionRaw)
   if (math) {
-    return language === 'pt' ? `Resultado: ${math}.` : `Result: ${math}.`
+    return `Result: ${math}.`
   }
 
   const amountFromQuestion = parseAmountFromText(questionRaw)
   const intents = detectIntentFlags(question)
 
-  if (/^(hi|hello|hey|oi|ola|olá)$/i.test(questionRaw)) {
-    return language === 'pt'
-      ? 'Oi! Eu sou a Ollie. Posso te guiar no app financeiro. Diga o que você quer fazer.'
-      : 'Hi! I am Ollie. I can guide you in the finance app. Tell me what you want to do.'
+  if (/^(hi|hello|hey)$/i.test(questionRaw)) {
+    return 'Hi! I am Ollie. I can guide you in the finance app. Tell me what you want to do.'
   }
 
-  if (question.includes('account') || question.includes('accounts') || question.includes('conta') || question.includes('contas')) {
-    return language === 'pt'
-      ? 'Para ver suas contas: clique em Accounts no menu lateral esquerdo. Lá você vê saldos, tipo de conta e instituição.'
-      : 'To see your accounts: click Accounts in the left sidebar. You will see balances, account types, and institutions there.'
+  if (question.includes('account') || question.includes('accounts')) {
+    return 'To see your accounts: click Accounts in the left sidebar. You will see balances, account types, and institutions there.'
   }
 
   const wantsExpenseView = intents.hasExpenseTerm && intents.hasViewTerm
@@ -214,61 +201,39 @@ function buildDeterministicReply({ context, latestUserMessage }) {
   const wantsIncomeAdd = intents.hasIncomeTerm && intents.hasAddTerm
 
   if (wantsExpenseView) {
-    return language === 'pt'
-      ? 'Para ver despesas por período: abra Expenses, use Search expenses para filtrar e ajuste o intervalo (ex.: último mês ou últimos dias).'
-      : 'To view expenses by period: open Expenses, use Search expenses to filter, and set the date range (for example, last month or last days).'
+    return 'To view expenses by period: open Expenses, use Search expenses to filter, and set the date range (for example, last month or last days).'
   }
 
   if (wantsIncomeView) {
-    return language === 'pt'
-      ? 'Para ver receitas por período: abra Expenses, filtre por Income e ajuste o intervalo para os últimos 7 dias, mês ou período desejado.'
-      : 'To view income by period: open Expenses, filter by Income, and set the range to last 7 days, last month, or your chosen period.'
+    return 'To view income by period: open Expenses, filter by Income, and set the range to last 7 days, last month, or your chosen period.'
   }
 
   if (wantsExpenseAdd) {
-    const amountHint = amountFromQuestion
-      ? language === 'pt'
-        ? ` com ${amountFromQuestion.toFixed(2)}`
-        : ` with ${amountFromQuestion.toFixed(2)}`
-      : ''
-    return language === 'pt'
-      ? `Para adicionar despesa${amountHint}: vá em Expenses > New Transaction, escolha Expense, informe descrição/categoria/data e salve.`
-      : `To add an expense${amountHint}: go to Expenses > New Transaction, choose Expense, add description/category/date, and save.`
+    const amountHint = amountFromQuestion ? ` with ${amountFromQuestion.toFixed(2)}` : ''
+    return `To add an expense${amountHint}: go to Expenses > New Transaction, choose Expense, add description/category/date, and save.`
   }
 
-  if (question.includes('expense') || question.includes('despesa') || question.includes('spent') || question.includes('gastei')) {
-    return language === 'pt'
-      ? 'Para adicionar despesa: vá em Expenses > New Transaction, escolha type Expense, informe valor/data/descrição, selecione conta e categoria e salve.'
-      : 'To add an expense: go to Expenses > New Transaction, choose type Expense, enter amount/date/description, select account and category, then save.'
+  if (question.includes('expense') || question.includes('spent')) {
+    return 'To add an expense: go to Expenses > New Transaction, choose type Expense, enter amount/date/description, select account and category, then save.'
   }
 
   if (wantsIncomeAdd) {
-    return language === 'pt'
-      ? 'Para adicionar receita: vá em Expenses > New Transaction, escolha Income, preencha valor/categoria/data e salve.'
-      : 'To add income: go to Expenses > New Transaction, choose Income, fill amount/category/date, and save.'
+    return 'To add income: go to Expenses > New Transaction, choose Income, fill amount/category/date, and save.'
   }
 
-  if (question.includes('income') || question.includes('receita') || question.includes('salary') || question.includes('earned')) {
-    return language === 'pt'
-      ? 'Para adicionar receita: vá em Expenses > New Transaction, escolha type Income, preencha os dados e salve.'
-      : 'To add income: go to Expenses > New Transaction, choose type Income, fill in the details, and save.'
+  if (question.includes('income') || question.includes('salary') || question.includes('earned')) {
+    return 'To add income: go to Expenses > New Transaction, choose type Income, fill in the details, and save.'
   }
 
-  if (question.includes('invest') || question.includes('trade') || question.includes('investimento') || question.includes('buy') || question.includes('sell')) {
-    return language === 'pt'
-      ? 'Para investir: abra Investments, use o formulário de trade, escolha ativo, buy/sell, quantidade e conta de origem, e confirme.'
-      : 'To invest: open Investments, use the trade form, choose asset, buy/sell side, quantity, and source account, then confirm.'
+  if (question.includes('invest') || question.includes('trade') || question.includes('buy') || question.includes('sell')) {
+    return 'To invest: open Investments, use the trade form, choose asset, buy/sell side, quantity, and source account, then confirm.'
   }
 
-  if (question.includes('settings') || question.includes('config') || question.includes('perfil') || question.includes('profile')) {
-    return language === 'pt'
-      ? 'Para editar preferências: abra Settings no menu lateral. Lá você ajusta perfil, moeda e outras opções.'
-      : 'To edit preferences: open Settings in the left sidebar. You can update profile, currency, and other options there.'
+  if (question.includes('settings') || question.includes('config') || question.includes('profile')) {
+    return 'To edit preferences: open Settings in the left sidebar. You can update profile, currency, and other options there.'
   }
 
-  return language === 'pt'
-    ? `Estou na rota ${path}. ${hint} ${action}`
-    : `You are currently on ${path}. ${hint} ${action}`
+  return `You are currently on ${path}. ${hint} ${action}`
 }
 
 function buildSystemPrompt({ userName, context }) {
@@ -278,7 +243,7 @@ function buildSystemPrompt({ userName, context }) {
 
   return [
     'You are Ollie, the in-app finance navigation copilot.',
-    'Always answer in clear, concise language matching the user (English or Portuguese).',
+    'Always answer in clear and concise English.',
     'Guide users on where to click and what to do on each page.',
     'Response style rules:',
     '- Start with a direct answer in 1 sentence.',
@@ -318,6 +283,22 @@ function sanitizeReply(text) {
     .replace(/\bGoogle AI\b/gi, 'Ollie')
     .replace(/\bGoogle\b/gi, 'Ollie')
     .trim()
+}
+
+function looksPortuguese(text) {
+  const sample = String(text || '').toLowerCase()
+  if (!sample) return false
+
+  // If the provider replies in Portuguese, force a deterministic English fallback.
+  return /(\bolá\b|\bvoce\b|\bvocê\b|\bpara\b|\bcom\b|\bsuas?\b|\bseu\b|\bdespesas?\b|\breceitas?\b|\bmes\b|\bmês\b|\baqui est[aã]o\b|\bclique\b|\bp[aá]gina\b|\bconfigura[cç][oõ]es\b|\binvestimentos?\b)/.test(sample)
+}
+
+function buildEnglishReply(reply, { context, latestUserMessage }) {
+  const clean = sanitizeReply(reply)
+  if (looksPortuguese(clean)) {
+    return buildFallbackReply({ context, latestUserMessage })
+  }
+  return clean
 }
 
 function toGeminiContents(messages) {
@@ -496,6 +477,7 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
     return { ok: false, status: 400, code: 'OLLIE_INVALID_PAYLOAD', message: 'Invalid payload format for Ollie chat.' }
   }
 
+  const latestUserMessage = getLatestUserMessage(parsed.data.messages)
   const safeUserId = String(userId || 'anonymous')
   const safeClientIp = String(clientIp || 'unknown-ip')
   const userChars = getLatestUserCharCount(parsed.data.messages)
@@ -504,7 +486,7 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
     if (FALLBACK_ENABLED) {
       return {
         ok: true,
-        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
+        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage }),
         ...buildModePayload({ mode: 'guidance', guidanceReason: guard.code || 'local_rate_limit', userId: safeUserId }),
       }
     }
@@ -536,7 +518,7 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
     if (FALLBACK_ENABLED) {
       return {
         ok: true,
-        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
+        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage }),
         ...buildModePayload({ mode: 'guidance', guidanceReason: 'monthly_live_budget_reached', userId: safeUserId }),
       }
     }
@@ -663,7 +645,7 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
     if (FALLBACK_ENABLED) {
       return {
         ok: true,
-        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage: getLatestUserMessage(parsed.data.messages) }),
+        reply: buildFallbackReply({ context: parsed.data.context, latestUserMessage }),
         ...buildModePayload({ mode: 'live', guidanceReason: null, userId: safeUserId }),
       }
     }
@@ -683,7 +665,7 @@ async function askOllie({ apiKey, model, messages, context, userName, userId, cl
   const quotaAfterLiveResponse = consumeLiveQuota(safeUserId)
   return {
     ok: true,
-    reply: sanitizeReply(reply),
+    reply: buildEnglishReply(reply, { context: parsed.data.context, latestUserMessage }),
     mode: 'live',
     guidanceReason: null,
     quota: quotaAfterLiveResponse,

@@ -17,12 +17,92 @@ app.use(express.json({ limit: '5mb' }))
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret'
 const PORT = process.env.PORT || 4000
 
+function isoDateLocal(date = new Date()) {
+  const offsetMs = date.getTimezoneOffset() * 60 * 1000
+  return new Date(date.getTime() - offsetMs).toISOString().slice(0, 10)
+}
+
 function normalizeText(text) {
   return String(text || '')
     .normalize('NFD')
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
+}
+
+function parseDateParts(value) {
+  const [yearRaw, monthRaw, dayRaw] = String(value || '').split('-')
+  const year = Number(yearRaw)
+  const month = Number(monthRaw)
+  const day = Number(dayRaw)
+  if (!Number.isFinite(year) || !Number.isFinite(month) || !Number.isFinite(day)) return null
+  return { year, month, day }
+}
+
+function parseIsoDateToUtc(value) {
+  const parts = parseDateParts(value)
+  if (!parts) return null
+  return new Date(Date.UTC(parts.year, parts.month - 1, parts.day, 12, 0, 0, 0))
+}
+
+function normalizeDateInput(value, fallback = isoDateLocal()) {
+  const raw = String(value || '').trim()
+  if (!raw) return fallback
+
+  const exactDay = raw.match(/^\d{4}-\d{2}-\d{2}$/)
+  if (exactDay) return exactDay[0]
+
+  const dayPrefix = raw.match(/^(\d{4}-\d{2}-\d{2})/)
+  if (dayPrefix) return dayPrefix[1]
+
+  const parsed = new Date(raw)
+  if (!Number.isNaN(parsed.getTime())) {
+    return isoDateLocal(parsed)
+  }
+
+  return fallback
+}
+
+function dateToIsoUtc(date) {
+  return date.toISOString().slice(0, 10)
+}
+
+function buildTxFilterFromQuery(query = {}) {
+  const typeRaw = String(query.type || '').toUpperCase()
+  const type = typeRaw === 'INCOME' || typeRaw === 'EXPENSE' ? typeRaw : 'ALL'
+  const categoryId = query.categoryId ? String(query.categoryId) : undefined
+  const search = query.search ? String(query.search).trim().toLowerCase() : undefined
+  const from = query.from ? normalizeDateInput(query.from, '') : undefined
+  const to = query.to ? normalizeDateInput(query.to, '') : undefined
+  return { type, categoryId, search, from, to }
+}
+
+function applyTransactionFilters(rows, txFilter) {
+  let filtered = Array.isArray(rows) ? rows : []
+
+  if (txFilter.type === 'INCOME') {
+    filtered = filtered.filter((t) => Number(t.amount) > 0)
+  } else if (txFilter.type === 'EXPENSE') {
+    filtered = filtered.filter((t) => Number(t.amount) < 0)
+  }
+
+  if (txFilter.categoryId) {
+    filtered = filtered.filter((t) => t.categoryId === txFilter.categoryId)
+  }
+
+  if (txFilter.search) {
+    filtered = filtered.filter((t) => String(t.description || '').toLowerCase().includes(txFilter.search))
+  }
+
+  if (txFilter.from) {
+    filtered = filtered.filter((t) => normalizeDateInput(t.date, '') >= txFilter.from)
+  }
+
+  if (txFilter.to) {
+    filtered = filtered.filter((t) => normalizeDateInput(t.date, '') <= txFilter.to)
+  }
+
+  return filtered
 }
 
 function getLatestUserMessage(messages) {
@@ -40,23 +120,23 @@ function inferBestRoute(message) {
   const text = normalizeText(message)
   if (!text) return null
 
-  if (/(invest|investment|investments|trade|asset|stock|etf|crypto|carteira|investimento|ativos)/.test(text)) {
+  if (/(invest|investment|investments|trade|asset|stock|etf|crypto)/.test(text)) {
     return '/investments'
   }
 
-  if (/(expense|expenses|spend|spent|gasto|gastos|despesa|despesas|budget|orcamento|income|incomes|salary|receita|receitas|ganho|ganhos|filter|filtro)/.test(text)) {
+  if (/(expense|expenses|spend|spent|budget|income|incomes|salary|filter)/.test(text)) {
     return '/expenses'
   }
 
-  if (/(account|accounts|bank|checking|savings|card|balance|conta|contas|saldo)/.test(text)) {
+  if (/(account|accounts|bank|checking|savings|card|balance)/.test(text)) {
     return '/accounts'
   }
 
-  if (/(profile|settings|config|preferences|perfil|configuracoes|configuracoes)/.test(text)) {
+  if (/(profile|settings|config|preferences)/.test(text)) {
     return '/settings'
   }
 
-  if (/(overview|kpi|dashboard|resumo|visao geral)/.test(text)) {
+  if (/(overview|kpi|dashboard)/.test(text)) {
     return '/dashboard'
   }
 
@@ -69,7 +149,12 @@ function signToken(userId) {
 
 function createGuestSnapshot() {
   const id = nanoid()
-  const today = new Date().toISOString().slice(0, 10)
+  const today = isoDateLocal()
+  const daysAgo = (n) => {
+    const base = new Date()
+    base.setDate(base.getDate() - n)
+    return isoDateLocal(base)
+  }
   const user = {
     id,
     email: `guest+${id}@guest.local`,
@@ -102,13 +187,18 @@ function createGuestSnapshot() {
   }
 
   const transactions = [
-    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-1', description: 'Salary - Guest Corp', type: 'INCOME', amount: 6200, currency: 'USD', date: today },
-    { id: nanoid(), userId: id, accountId: accountIds.brokerage, categoryId: 'cat-2', description: 'ETF contribution', type: 'INCOME', amount: 850, currency: 'USD', date: today },
-    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-3', description: 'Rent', type: 'EXPENSE', amount: -1800, currency: 'USD', date: today },
-    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-4', description: 'Groceries', type: 'EXPENSE', amount: -240, currency: 'USD', date: today },
-    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-5', description: 'Ride share', type: 'EXPENSE', amount: -32, currency: 'USD', date: today },
-    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-6', description: 'Streaming services', type: 'EXPENSE', amount: -28, currency: 'USD', date: today },
-    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-7', description: 'Electricity bill', type: 'EXPENSE', amount: -120, currency: 'USD', date: today },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-1', description: 'Salary - Guest Corp', type: 'INCOME', amount: 6200, currency: 'USD', date: daysAgo(3) },
+    { id: nanoid(), userId: id, accountId: accountIds.brokerage, categoryId: 'cat-2', description: 'ETF contribution', type: 'INCOME', amount: 850, currency: 'USD', date: daysAgo(18) },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-3', description: 'Rent', type: 'EXPENSE', amount: -1800, currency: 'USD', date: daysAgo(16) },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-4', description: 'Groceries', type: 'EXPENSE', amount: -240, currency: 'USD', date: daysAgo(8) },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-5', description: 'Ride share', type: 'EXPENSE', amount: -32, currency: 'USD', date: daysAgo(34) },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-6', description: 'Streaming services', type: 'EXPENSE', amount: -28, currency: 'USD', date: daysAgo(52) },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-7', description: 'Electricity bill', type: 'EXPENSE', amount: -120, currency: 'USD', date: daysAgo(74) },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-5', description: 'Gas station', type: 'EXPENSE', amount: -58, currency: 'USD', date: daysAgo(95) },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-4', description: 'Supermarket', type: 'EXPENSE', amount: -186, currency: 'USD', date: daysAgo(121) },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-1', description: 'Freelance project', type: 'INCOME', amount: 980, currency: 'USD', date: daysAgo(140) },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-3', description: 'Rent', type: 'EXPENSE', amount: -1780, currency: 'USD', date: daysAgo(45) },
+    { id: nanoid(), userId: id, accountId: accountIds.checking, categoryId: 'cat-7', description: 'Water bill', type: 'EXPENSE', amount: -74, currency: 'USD', date: daysAgo(27) },
   ]
 
   const investments = [
@@ -221,7 +311,7 @@ app.post('/auth/register', (req, res) => {
     type: 'CHECKING',
     currency: user.currency,
     balance: 0,
-    lastUpdated: new Date().toISOString().slice(0, 10),
+    lastUpdated: isoDateLocal(),
     protected: 1,
   }
   db.prepare(
@@ -349,7 +439,7 @@ app.post('/accounts', (req, res) => {
   const parsed = schema.safeParse(req.body)
   if (!parsed.success) return res.status(400).json({ message: 'Invalid account payload' })
 
-  const account = { id: nanoid(), userId: req.userId, lastUpdated: new Date().toISOString().slice(0, 10), protected: 0, ...parsed.data }
+  const account = { id: nanoid(), userId: req.userId, lastUpdated: isoDateLocal(), protected: 0, ...parsed.data }
   db.prepare(
     'INSERT INTO accounts (id, userId, name, institution, type, currency, balance, lastUpdated, protected) VALUES (@id, @userId, @name, @institution, @type, @currency, @balance, @lastUpdated, @protected)'
   ).run(account)
@@ -371,36 +461,35 @@ app.delete('/accounts/:id', (req, res) => {
 })
 
 app.get('/transactions', (req, res) => {
-  const { type, categoryId, search, page = 1, pageSize = 10, from, to } = req.query
-  const all = db.prepare('SELECT * FROM transactions WHERE userId = ?').all(req.userId)
-  let filtered = all
-  if (type && type !== 'ALL') {
-    filtered = filtered.filter((t) => (type === 'INCOME' ? t.amount > 0 : t.amount < 0))
-  }
-  if (categoryId) {
-    filtered = filtered.filter((t) => t.categoryId === categoryId)
-  }
-  if (search) {
-    filtered = filtered.filter((t) => t.description.toLowerCase().includes(String(search).toLowerCase()))
-  }
-  if (from && to) {
-    filtered = filtered.filter((t) => t.date >= from && t.date <= to)
-  }
+  const { page = 1, pageSize = 10 } = req.query
+  const txFilter = buildTxFilterFromQuery(req.query)
+  const all = db.prepare('SELECT rowid, * FROM transactions WHERE userId = ?').all(req.userId)
+  let filtered = applyTransactionFilters(all, txFilter)
 
-  const totalItems = filtered.length
+  filtered = filtered
+    .slice()
+    .sort((a, b) => {
+      const aDate = normalizeDateInput(a.date, '')
+      const bDate = normalizeDateInput(b.date, '')
+      if (aDate !== bDate) return bDate.localeCompare(aDate)
+      return Number(b.rowid || 0) - Number(a.rowid || 0)
+    })
+
+  const totalItemsSorted = filtered.length
   const pageNum = Number(page)
   const sizeNum = Number(pageSize)
-  const items = filtered.slice((pageNum - 1) * sizeNum, pageNum * sizeNum)
+  const items = filtered
+    .slice((pageNum - 1) * sizeNum, pageNum * sizeNum)
+    .map(({ rowid: _rowid, ...rest }) => rest)
 
-  res.json({ items, page: pageNum, pageSize: sizeNum, totalItems, totalPages: Math.max(1, Math.ceil(totalItems / sizeNum)) })
+  res.json({ items, page: pageNum, pageSize: sizeNum, totalItems: totalItemsSorted, totalPages: Math.max(1, Math.ceil(totalItemsSorted / sizeNum)) })
 })
 
 app.get('/expenses/breakdown', (req, res) => {
-  const { from, to } = req.query
-  let txs = db.prepare('SELECT * FROM transactions WHERE userId = ? AND amount < 0').all(req.userId)
-  if (from && to) {
-    txs = txs.filter((t) => t.date >= from && t.date <= to)
-  }
+  const txFilter = buildTxFilterFromQuery(req.query)
+  let txs = db.prepare('SELECT * FROM transactions WHERE userId = ?').all(req.userId)
+  txs = applyTransactionFilters(txs, txFilter)
+  txs = txs.filter((t) => Number(t.amount) < 0)
   const byCategory = txs.reduce((acc, tx) => {
     acc[tx.categoryId] = (acc[tx.categoryId] || 0) + Math.abs(tx.amount)
     return acc
@@ -429,13 +518,14 @@ app.post('/transactions', (req, res) => {
   if (!account) return res.status(404).json({ message: 'Account not found' })
 
   const amount = parsed.data.type === 'EXPENSE' ? -Math.abs(parsed.data.amount) : Math.abs(parsed.data.amount)
-  const tx = { id: nanoid(), userId: req.userId, ...parsed.data, amount, currency: account.currency }
+  const normalizedDate = normalizeDateInput(parsed.data.date)
+  const tx = { id: nanoid(), userId: req.userId, ...parsed.data, date: normalizedDate, amount, currency: account.currency }
   db.prepare(
     'INSERT INTO transactions (id, userId, accountId, categoryId, description, type, amount, currency, date) VALUES (@id, @userId, @accountId, @categoryId, @description, @type, @amount, @currency, @date)'
   ).run(tx)
 
   db.prepare('UPDATE accounts SET balance = balance + ? , lastUpdated = ? WHERE id = ?')
-    .run(amount, parsed.data.date, parsed.data.accountId)
+    .run(amount, normalizedDate, parsed.data.accountId)
 
   res.status(201).json(tx)
 })
@@ -602,23 +692,48 @@ async function loadInvestmentsWithPrices(userId) {
   )
 }
 
-async function buildNetWorthPoints(userId, days = 90) {
-  const daysClamped = Math.min(365, Math.max(7, days))
-  const today = new Date()
-  today.setUTCHours(12, 0, 0, 0)
-  const start = new Date(today)
-  start.setUTCDate(today.getUTCDate() - (daysClamped - 1))
+async function buildNetWorthPoints(userId, options = {}) {
+  const txFilter = {
+    type: options.type === 'INCOME' || options.type === 'EXPENSE' ? options.type : 'ALL',
+    categoryId: options.categoryId || undefined,
+    search: options.search ? String(options.search).toLowerCase() : undefined,
+    from: options.from ? normalizeDateInput(options.from, '') : undefined,
+    to: options.to ? normalizeDateInput(options.to, '') : undefined,
+  }
 
-  const toIso = (date) => date.toISOString().slice(0, 10)
-  const startIso = toIso(start)
+  const daysClamped = Math.min(365, Math.max(7, Number(options.days || 90)))
+  const todayIso = isoDateLocal()
+  const today = parseIsoDateToUtc(todayIso)
+  const fromDate = txFilter.from ? parseIsoDateToUtc(txFilter.from) : null
+  const toDate = txFilter.to ? parseIsoDateToUtc(txFilter.to) : null
+
+  const end = toDate || today
+  const start = fromDate || new Date(end)
+  if (!fromDate) {
+    start.setUTCDate(end.getUTCDate() - (daysClamped - 1))
+  }
+
+  if (start > end) {
+    const temp = new Date(start)
+    start.setTime(end.getTime())
+    end.setTime(temp.getTime())
+  }
+
+  const startIso = dateToIsoUtc(start)
+  const endIso = dateToIsoUtc(end)
 
   const dates = []
-  for (let cursor = new Date(start); cursor <= today; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
-    dates.push(toIso(cursor))
+  for (let cursor = new Date(start); cursor <= end; cursor.setUTCDate(cursor.getUTCDate() + 1)) {
+    dates.push(dateToIsoUtc(cursor))
   }
 
   const accounts = db.prepare('SELECT * FROM accounts WHERE userId = ?').all(userId)
-  const transactions = db.prepare('SELECT * FROM transactions WHERE userId = ?').all(userId)
+  const transactions = applyTransactionFilters(
+    db.prepare('SELECT * FROM transactions WHERE userId = ?').all(userId),
+    txFilter,
+  )
+    .map((tx) => ({ ...tx, date: normalizeDateInput(tx.date, '') }))
+    .filter((tx) => tx.date)
   const investments = await loadInvestmentsWithPrices(userId)
 
   const currency = accounts[0]?.currency || investments[0]?.currency || 'USD'
@@ -668,7 +783,7 @@ async function buildNetWorthPoints(userId, days = 90) {
     }
   })
 
-  return { currency, points, investments }
+  return { currency, points, investments, from: startIso, to: endIso }
 }
 
 app.get('/investments', async (req, res) => {
@@ -695,21 +810,22 @@ app.get('/market/assets', async (_req, res) => {
 app.get('/kpis', (req, res) => {
   ;(async () => {
     try {
+      const txFilter = buildTxFilterFromQuery(req.query)
       const accounts = db.prepare('SELECT * FROM accounts WHERE userId = ?').all(req.userId)
-      const transactions = db.prepare('SELECT * FROM transactions WHERE userId = ?').all(req.userId)
-      const { currency, points, investments } = await buildNetWorthPoints(req.userId, 90)
-      const investedAmount = investments.reduce((sum, inv) => sum + inv.quantity * inv.currentPrice, 0)
-      const monthlyExpenses = Math.abs(
-        transactions
-          .filter((t) => t.amount < 0)
-          .filter((t) => {
-            const txDate = new Date(t.date)
-            const start = new Date()
-            start.setDate(start.getDate() - 30)
-            return txDate >= start
-          })
-          .reduce((sum, t) => sum + t.amount, 0),
+      const transactions = applyTransactionFilters(
+        db.prepare('SELECT * FROM transactions WHERE userId = ?').all(req.userId),
+        txFilter,
       )
+      const { currency, points, investments } = await buildNetWorthPoints(req.userId, {
+        days: Number(req.query.days || 90),
+        from: txFilter.from,
+        to: txFilter.to,
+        type: txFilter.type,
+        categoryId: txFilter.categoryId,
+        search: txFilter.search,
+      })
+      const investedAmount = investments.reduce((sum, inv) => sum + inv.quantity * inv.currentPrice, 0)
+      const monthlyExpenses = Math.abs(transactions.filter((t) => t.amount < 0).reduce((sum, t) => sum + t.amount, 0))
       const totalBalance = accounts.reduce((sum, acc) => sum + acc.balance, 0)
       const first = points.at(0)?.total || 0
       const last = points.at(-1)?.total || totalBalance + investedAmount
@@ -724,24 +840,40 @@ app.get('/kpis', (req, res) => {
 })
 
 app.get('/cashflow', (req, res) => {
+  const txFilter = buildTxFilterFromQuery(req.query)
   const days = Number(req.query.days || 30)
-  const since = new Date()
-  since.setDate(since.getDate() - days)
-  const sinceIso = since.toISOString().slice(0, 10)
-  const txs = db.prepare('SELECT * FROM transactions WHERE userId = ? AND date >= ?').all(req.userId, sinceIso)
+  if (!txFilter.from && !txFilter.to) {
+    const since = new Date()
+    since.setDate(since.getDate() - days)
+    txFilter.from = isoDateLocal(since)
+    txFilter.to = isoDateLocal()
+  }
+
+  const txs = applyTransactionFilters(
+    db.prepare('SELECT * FROM transactions WHERE userId = ?').all(req.userId),
+    txFilter,
+  )
   const income = txs.filter((t) => t.amount > 0).reduce((sum, t) => sum + t.amount, 0)
   const expense = Math.abs(txs.filter((t) => t.amount < 0).reduce((sum, t) => sum + t.amount, 0))
   const net = income - expense
   const currency = txs[0]?.currency || db.prepare('SELECT currency FROM accounts WHERE userId = ? LIMIT 1').get(req.userId)?.currency || 'USD'
-  res.json({ income, expense, net, currency, days })
+  res.json({ income, expense, net, currency, days, from: txFilter.from, to: txFilter.to, type: txFilter.type })
 })
 
 app.get('/net-worth', async (req, res) => {
   try {
+    const txFilter = buildTxFilterFromQuery(req.query)
     const daysParam = Number(req.query.days || 90)
-    const history = await buildNetWorthPoints(req.userId, daysParam)
+    const history = await buildNetWorthPoints(req.userId, {
+      days: daysParam,
+      from: txFilter.from,
+      to: txFilter.to,
+      type: txFilter.type,
+      categoryId: txFilter.categoryId,
+      search: txFilter.search,
+    })
 
-    res.json({ currency: history.currency, points: history.points })
+    res.json({ currency: history.currency, points: history.points, from: history.from, to: history.to, type: txFilter.type })
   } catch (err) {
     console.error('Net worth error', err)
     res.status(500).json({ message: 'Unable to build net worth history' })
@@ -846,7 +978,7 @@ app.post('/investments/trade', async (req, res) => {
   const existing = db.prepare('SELECT * FROM investments WHERE userId = ? AND symbol = ?').get(req.userId, parsed.data.symbol)
 
   if (parsed.data.side === 'BUY') {
-    db.prepare('UPDATE accounts SET balance = balance - ?, lastUpdated = ? WHERE id = ?').run(cost, new Date().toISOString().slice(0, 10), account.id)
+    db.prepare('UPDATE accounts SET balance = balance - ?, lastUpdated = ? WHERE id = ?').run(cost, isoDateLocal(), account.id)
     if (existing) {
       const newQty = existing.quantity + parsed.data.quantity
       db.prepare('UPDATE investments SET quantity = ?, currentPrice = ? WHERE id = ?').run(newQty, livePrice, existing.id)
@@ -860,7 +992,7 @@ app.post('/investments/trade', async (req, res) => {
       return res.status(400).json({ message: 'Not enough holdings to sell' })
     }
     const newQty = existing.quantity - parsed.data.quantity
-    db.prepare('UPDATE accounts SET balance = balance + ?, lastUpdated = ? WHERE id = ?').run(cost, new Date().toISOString().slice(0, 10), account.id)
+    db.prepare('UPDATE accounts SET balance = balance + ?, lastUpdated = ? WHERE id = ?').run(cost, isoDateLocal(), account.id)
     db.prepare('UPDATE investments SET quantity = ?, currentPrice = ? WHERE id = ?').run(newQty, livePrice, existing.id)
     if (newQty === 0) {
       db.prepare('DELETE FROM investments WHERE id = ?').run(existing.id)

@@ -9,9 +9,10 @@ import { useQuery } from '@tanstack/react-query'
 import { fetchCategories } from '@/services/categories'
 import type { Transaction } from '@/types'
 import { useCurrency } from '@/hooks/useCurrency'
+import { formatDateLabel } from '@/utils/date'
 
 function formatDate(date: string) {
-  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(new Date(date))
+  return formatDateLabel(date)
 }
 
 function typeBadge(tx: Transaction) {

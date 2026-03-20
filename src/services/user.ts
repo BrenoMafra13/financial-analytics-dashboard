@@ -1,5 +1,6 @@
 import { api } from './http'
 import type { User } from '@/types'
+import type { TransactionFilters } from '@/types'
 
 export async function updateProfile(payload: {
   name: string
@@ -15,10 +16,18 @@ export async function updateProfile(payload: {
   return data
 }
 
-export async function fetchCashflow(days = 30) {
+export async function fetchCashflow(days = 30, filters?: TransactionFilters) {
+  const params = {
+    days,
+    type: filters?.type,
+    categoryId: filters?.categoryId,
+    search: filters?.search,
+    from: filters?.period.from,
+    to: filters?.period.to,
+  }
   const { data } = await api.get<{ income: number; expense: number; net: number; currency: string; days: number }>(
     '/cashflow',
-    { params: { days } },
+    { params },
   )
   return data
 }
